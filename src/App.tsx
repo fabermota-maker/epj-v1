@@ -5,7 +5,7 @@ import { loadState, saveState } from './storage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Category = 'Limpeza' | 'Higiene' | 'Escritório' | 'Cozinha' | 'Segurança' | 'Manutenção'
+type Category = string
 type Unit = 'un' | 'L' | 'kg' | 'cx' | 'pct' | 'rolos' | 'pares' | 'm' | 'frascos' | 'fardos' | 'rolo'
 type Tab = 'estoque' | 'movimentacoes' | 'alertas' | 'ajustes'
 type FilterType = 'todos' | 'normal' | 'atencao' | 'critico' | 'zerado'
@@ -175,6 +175,38 @@ const GLASS: React.CSSProperties = {
   border: `1px solid ${BORDER}`,
 }
 
+const DEFAULT_CATEGORIES: Category[] = ['Limpeza', 'Higiene', 'Escritório', 'Cozinha', 'Segurança', 'Manutenção']
+const CAT_PALETTE = ['#5B9FD4', '#4ECDC4', '#F0A020', '#6FCF6F', '#8B9AE8', '#C4A35A', '#E88984', '#A78BFA']
+const CAT_ACCENT: Record<string, string> = {
+  Limpeza: '#5B9FD4',
+  Higiene: '#4ECDC4',
+  Escritório: '#F0A020',
+  Cozinha: '#6FCF6F',
+  Segurança: '#8B9AE8',
+  Manutenção: '#C4A35A',
+}
+
+function catAccent(name: string): string {
+  if (CAT_ACCENT[name]) return CAT_ACCENT[name]
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return CAT_PALETTE[h % CAT_PALETTE.length]
+}
+
+function uniqueCategories(list: string[]): Category[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of list) {
+    const t = raw.trim()
+    if (!t) continue
+    const k = t.toLocaleLowerCase('pt-BR')
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(t)
+  }
+  return out.length ? out : [...DEFAULT_CATEGORIES]
+}
+
 const STATUS_META = {
   ok:       { label: 'Normal',  dot: '#D7C4A8', text: '#F0D5C4', bg: 'rgba(240,213,196,0.16)',  iconBg: 'rgba(240,213,196,0.16)', iconBorder: 'rgba(240,213,196,0.32)', iconColor: '#F0D5C4' },
   low:      { label: 'Atenção', dot: '#E8B07A', text: '#F0C9A0', bg: 'rgba(232,176,122,0.16)',  iconBg: 'rgba(232,176,122,0.16)', iconBorder: 'rgba(232,176,122,0.32)', iconColor: '#F0C9A0' },
@@ -303,8 +335,6 @@ const PRODUCT_ICONS: Record<string, React.ReactNode> = {
   ),
 }
 
-const ICON_KEYS = Object.keys(PRODUCT_ICONS)
-
 function ProdIcon({ iconKey, size = 22, color = AMBER }: { iconKey: string; size?: number; color?: string }) {
   const svg = PRODUCT_ICONS[iconKey] ?? PRODUCT_ICONS['bottle']
   return (
@@ -364,22 +394,35 @@ const Ic = {
   bell:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
   gear:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
   arrow:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>,
+  funnel: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16l-6.5 8.2V18l-3 2v-7.8L4 4z"/></svg>,
+  calendar: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>,
+  shield: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l8 3v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3z"/></svg>,
+  warn: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   trend:  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>,
 }
 
 // ─── Bottom Sheet ─────────────────────────────────────────────────────────────
 
-function Sheet({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+function Sheet({ onClose, children, fit }: { onClose: () => void; children: React.ReactNode; fit?: boolean }) {
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(18,10,12,0.28)', backdropFilter: 'blur(14px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
       onClick={onClose}
     >
       <div
-        style={{ width: '100%', maxWidth: 520, ...GLASS, borderRadius: '36px 36px 0 0', maxHeight: '92dvh', overflowY: 'auto', animation: 'slideUp .32s cubic-bezier(.34,1.4,.64,1)', borderBottom: 'none' }}
+        className={fit ? 'sheet-fit' : undefined}
+        style={{
+          width: '100%', maxWidth: 520, ...GLASS, borderRadius: '28px 28px 0 0', borderBottom: 'none',
+          maxHeight: fit ? '100dvh' : '92dvh',
+          height: fit ? '100dvh' : undefined,
+          overflowY: fit ? 'hidden' : 'auto',
+          display: fit ? 'flex' : undefined,
+          flexDirection: fit ? 'column' : undefined,
+          animation: 'slideUp .32s cubic-bezier(.34,1.4,.64,1)',
+        }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: fit ? 8 : 12, paddingBottom: 2, flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, borderRadius: 99, background: 'rgba(120,120,128,0.28)' }} />
         </div>
         {children}
@@ -390,14 +433,28 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
 
 // ─── Stat Tile ────────────────────────────────────────────────────────────────
 
-function StatTile({ label, value, unit, accent, icon }: { label: string; value: number; unit?: string; accent?: string; icon?: React.ReactNode }) {
+function RingStat({ label, display, color, pct, icon, title }: {
+  label: string; display: string; color: string; pct: number; icon: React.ReactNode; title?: string
+}) {
+  const size = 100
+  const r = 37
+  const c = 2 * Math.PI * r
+  const dash = c * Math.min(1, Math.max(0, pct))
+  const numSize = display.length > 3 ? 18 : 22
   return (
-    <div style={{ flex: 1, ...GLASS, borderRadius: 24, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {icon && <div style={{ color: accent ?? CAPTION, opacity: 0.85 }}>{icon}</div>}
-      <p style={{ margin: 0, fontSize: 24, fontWeight: FW_BOLD, color: accent ?? LABEL, lineHeight: 1, letterSpacing: -0.8 }}>
-        {value}{unit && <span style={{ fontSize: 12, fontWeight: FW_LIGHT, color: CAPTION, marginLeft: 3 }}>{unit}</span>}
-      </p>
-      <p style={{ margin: 0, fontSize: 11, color: CAPTION, fontWeight: FW_LIGHT, letterSpacing: 0.2 }}>{label}</p>
+    <div title={title} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <div className="ring-stat-frost" aria-hidden />
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: 'relative', zIndex: 1, transform: 'rotate(-90deg)', filter: `drop-shadow(0 0 6px ${color}88)` }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="7" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${dash} ${c}`} />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingBottom: 8 }}>
+          <div style={{ fontSize: numSize, fontWeight: FW_BOLD, color, lineHeight: 1, letterSpacing: -1, textShadow: '0 2px 10px rgba(6,12,28,0.95)' }}>{display}</div>
+          <div style={{ fontSize: 10, color: '#FFFBFA', fontWeight: FW_BOLD, marginTop: 4, textShadow: '0 1px 8px rgba(6,12,28,0.95)' }}>{label}</div>
+        </div>
+        <div style={{ position: 'absolute', left: '50%', bottom: 5, transform: 'translateX(-50%)', zIndex: 2, color, opacity: 1 }}>{icon}</div>
+      </div>
     </div>
   )
 }
@@ -408,74 +465,91 @@ function ProductRow({ product, onSelect, onAdd, onRemove }: {
   product: Product; onSelect: () => void; onAdd: () => void; onRemove: () => void; isLast?: boolean
 }) {
   const s = stockStatus(product)
-  const sm = STATUS_META[s]
-  const pct = stockPct(product)
+  const low = s === 'critical' || s === 'empty'
+  const accent = low ? '#E04B45' : catAccent(product.category)
 
   return (
     <div
-      className={s === 'critical' || s === 'empty' ? 'product-row--alert' : undefined}
       onClick={onSelect}
-      style={{ ...GLASS, borderRadius: 24, cursor: 'pointer', overflow: 'hidden', transition: 'transform .15s' }}
+      style={{ ...GLASS, borderRadius: 18, cursor: 'pointer', overflow: 'hidden', transition: 'transform .15s', position: 'relative' }}
       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}
     >
+      <div
+        className={low ? 'product-edge--low' : undefined}
+        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 5, background: low ? undefined : accent, borderRadius: '18px 0 0 18px', zIndex: 1 }}
+      />
       {/* Main row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 16px' }}>
 
         {/* Name + subtitle */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: FW_BOLD, fontSize: 15, color: LABEL, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 }}>
+          <div style={{ fontWeight: FW_BOLD, fontSize: 15, color: '#FFFBFA', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2, textShadow: '0 1px 6px rgba(6,12,28,0.8)' }}>
             {product.name}
           </div>
-          <div style={{ fontSize: 12, color: CAPTION, fontWeight: FW_LIGHT }}>
-            {product.category} · min {product.minStock} · ideal {idealStockOf(product)} {product.unit}
+          <div style={{ fontSize: 11, color: 'rgba(255,250,246,0.82)', fontWeight: FW_NORMAL, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            min {product.minStock} · ideal {idealStockOf(product)} {product.unit}
           </div>
         </div>
 
-        {/* EXT column */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 44, flexShrink: 0 }}>
-          <span style={{ fontSize: 9, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>EXT</span>
-          <span style={{ fontSize: 26, fontWeight: FW_BOLD, color: LABEL, lineHeight: 1, letterSpacing: -1 }}>{product.stock}</span>
-          <span style={{ fontSize: 10, color: CAPTION, marginTop: 2 }}>{product.unit}</span>
+        {/* Estoque */}
+        <div title="Estoque no depósito (quantidade na unidade do produto)" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48, flexShrink: 0 }}>
+          <span style={{ fontSize: 9, fontWeight: FW_BOLD, color: '#7FEDE6', textTransform: 'uppercase', letterSpacing: 0.3, lineHeight: 1 }}>estoque</span>
+          <span style={{ fontSize: 20, fontWeight: FW_BOLD, color: '#FFFBFA', lineHeight: 1.05, letterSpacing: -0.8 }}>{product.stock}</span>
+          <span style={{ fontSize: 10, color: 'rgba(255,250,246,0.78)', lineHeight: 1.2 }}>de {idealStockOf(product)} {product.unit}</span>
         </div>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 40, background: BORDER, flexShrink: 0 }} />
+        <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,0.28)', flexShrink: 0 }} />
 
-        {/* USO column */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 44, flexShrink: 0 }}>
-          <span style={{ fontSize: 9, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>USO</span>
-          <span style={{ fontSize: 26, fontWeight: FW_BOLD, color: product.used > 0 ? CORAL : SUBLABEL, lineHeight: 1, letterSpacing: -1 }}>{product.used}</span>
-          <span style={{ fontSize: 10, color: CAPTION, marginTop: 2 }}>{product.unit}</span>
+        {/* Em uso */}
+        <div title="Quantidade já retirada / em uso, na mesma unidade" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 44, flexShrink: 0 }}>
+          <span style={{ fontSize: 9, fontWeight: FW_BOLD, color: '#F0A8A4', textTransform: 'uppercase', letterSpacing: 0.3, lineHeight: 1 }}>em uso</span>
+          <span style={{ fontSize: 20, fontWeight: FW_BOLD, color: product.used > 0 ? '#F3B4B0' : 'rgba(255,250,246,0.55)', lineHeight: 1.05, letterSpacing: -0.8 }}>{product.used}</span>
+          <span style={{ fontSize: 10, color: 'rgba(255,250,246,0.78)', lineHeight: 1.2 }}>{product.unit}</span>
         </div>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 40, background: BORDER, flexShrink: 0 }} />
+        <div style={{ width: 1, height: 36, background: 'rgba(255,255,255,0.28)', flexShrink: 0 }} />
 
-        {/* Stepper */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        {/* Stepper — two equal circles in a capsule (reference) */}
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, flexShrink: 0,
+            padding: 5, borderRadius: 999,
+            background: 'linear-gradient(180deg, rgba(18,28,48,0.9), rgba(8,14,28,0.75))',
+            border: '1px solid rgba(180,210,240,0.18)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
           <button
             onClick={onAdd}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: INK, border: 'none', color: INK_FG, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'transform .12s' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.12)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+            aria-label="Entrada"
+            style={{
+              width: 26, height: 26, borderRadius: '50%', padding: 0,
+              background: 'radial-gradient(circle at 50% 38%, #1c2430 0%, #0e141c 72%)',
+              color: '#FFFBFA',
+              border: '1.5px solid #4ECDC4',
+              boxShadow: '0 0 0 1px rgba(78,205,196,0.25), 0 0 7px rgba(78,205,196,0.55), inset 0 1px 2px rgba(0,0,0,0.45)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
           <button
             onClick={onRemove}
-            style={{ width: 30, height: 16, borderRadius: 8, background: FILL2, border: `1px solid ${BORDER}`, color: SUBLABEL, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .12s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = `rgba(var(--tok-blue-rgb),0.12)`; e.currentTarget.style.borderColor = BLUE; e.currentTarget.style.color = BLUE }}
-            onMouseLeave={e => { e.currentTarget.style.background = FILL2; e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = SUBLABEL }}
+            aria-label="Retirada"
+            style={{
+              width: 26, height: 26, borderRadius: '50%', padding: 0,
+              background: 'radial-gradient(circle at 50% 38%, #1c2430 0%, #0e141c 72%)',
+              color: '#FFFBFA',
+              border: '1.5px solid rgba(90,130,180,0.45)',
+              boxShadow: '0 0 0 1px rgba(40,70,110,0.35), inset 0 1px 2px rgba(0,0,0,0.45)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}
           >
-            <svg width="10" height="2" viewBox="0 0 10 2" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M1 1h8"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M5 12h14"/></svg>
           </button>
         </div>
-      </div>
-
-      {/* Status bar — full width at bottom */}
-      <div style={{ height: 4, background: FILL, position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: sm.dot, borderRadius: '0 2px 2px 0', transition: 'width .3s', boxShadow: `0 0 6px ${sm.dot}` }} />
       </div>
     </div>
   )
@@ -688,91 +762,175 @@ function DetailSheet({ product, movements, onClose, onEdit, onDelete, onAdd, onR
 
 // ─── Product Form ─────────────────────────────────────────────────────────────
 
-const ICONS_LIST = ICON_KEYS
-const CATEGORIES: Category[] = ['Limpeza','Higiene','Escritório','Cozinha','Segurança','Manutenção']
 const UNITS: Unit[] = ['un','L','kg','cx','pct','rolos','pares','m']
 
-function ProductForm({ initial, onSave, onCancel }: {
-  initial?: Partial<Product>; onSave: (p: Partial<Product>) => void; onCancel: () => void
+function groupByCategory(list: Product[], order: string[]): { category: string; items: Product[] }[] {
+  const buckets = new Map<string, Product[]>()
+  for (const p of list) {
+    const key = p.category || 'Outros'
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key)!.push(p)
+  }
+  for (const items of buckets.values()) {
+    items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }
+  const extras = [...buckets.keys()]
+    .filter(k => !order.includes(k))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  return [...order, ...extras]
+    .filter(c => buckets.has(c))
+    .map(category => ({ category, items: buckets.get(category)! }))
+}
+
+function ProductForm({ initial, onSave, onCancel, categories, onCreateCategory, onRenameCategory, onRemoveCategory }: {
+  initial?: Partial<Product>
+  onSave: (p: Partial<Product>) => void
+  onCancel: () => void
+  categories: string[]
+  onCreateCategory: (name: string) => string | null
+  onRenameCategory: (from: string, to: string) => string | null
+  onRemoveCategory: (name: string) => string | null
 }) {
   const [form, setForm] = useState<Partial<Product>>({
-    name: '', category: 'Limpeza', unit: 'un', stock: 0, minStock: 5, idealStock: 5, icon: 'bottle', notes: '',
+    name: '', category: categories[0] || 'Limpeza', unit: 'un', stock: 0, minStock: 5, idealStock: 5, icon: 'bottle', notes: '',
     ...initial,
   })
+  const [catMode, setCatMode] = useState<'idle' | 'create' | 'edit'>('idle')
+  const [catDraft, setCatDraft] = useState('')
+  const [catMsg, setCatMsg] = useState('')
 
-  const inp: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', padding: '13px 15px', borderRadius: 13,
-    border: '1.5px solid rgba(255,255,255,0.42)', background: 'rgba(10, 16, 28, 0.92)', fontSize: 15, color: '#FFFBFA', outline: 'none', colorScheme: 'dark',
+  const currentCat = form.category || categories[0] || 'Limpeza'
+  const currentTint = catAccent(currentCat)
+
+  const applyCatName = () => {
+    const name = catDraft.trim()
+    if (!name) { setCatMsg('Digite um nome.'); return }
+    const result = catMode === 'create' ? onCreateCategory(name) : onRenameCategory(currentCat, name)
+    if (!result) { setCatMsg('Essa categoria já existe.'); return }
+    setForm(f => ({ ...f, category: result }))
+    setCatMode('idle')
+    setCatDraft('')
+    setCatMsg('')
   }
 
-  const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 13 }}>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: FW_BOLD, color: '#FFFBFA', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.7 }}>{label}</label>
+  const removeCurrent = () => {
+    if (categories.length <= 1) { setCatMsg('Mantenha ao menos uma categoria.'); return }
+    const fallback = onRemoveCategory(currentCat)
+    if (!fallback) { setCatMsg('Não foi possível retirar.'); return }
+    setForm(f => ({ ...f, category: fallback }))
+    setCatMode('idle')
+    setCatMsg('')
+  }
+
+  const inp: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', padding: '8px 11px', borderRadius: 11,
+    border: '1.5px solid rgba(255,255,255,0.42)', background: 'rgba(10, 16, 28, 0.92)', fontSize: 14, color: '#FFFBFA', outline: 'none', colorScheme: 'dark',
+  }
+
+  const Field = ({ label, children, tight }: { label: string; children: React.ReactNode; tight?: boolean }) => (
+    <div style={{ marginBottom: tight ? 0 : 8 }}>
+      <label style={{ display: 'block', fontSize: 10, fontWeight: FW_BOLD, color: '#FFFBFA', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.6 }}>{label}</label>
       {children}
     </div>
   )
 
+  const miniBtn: React.CSSProperties = {
+    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+    padding: '7px 6px', borderRadius: 10, border: `1px solid ${BORDER}`, background: 'rgba(8,16,36,0.55)',
+    color: LABEL, fontSize: 11, fontWeight: FW_BOLD, cursor: 'pointer',
+  }
+
   return (
-    <Sheet onClose={onCancel}>
-      <div style={{ padding: '4px 20px 36px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: FW_BOLD, color: LABEL }}>{initial?.id ? 'Editar produto' : 'Novo produto'}</h2>
-          <button onClick={onCancel} style={{ width: 32, height: 32, borderRadius: 50, background: FILL2, color: CAPTION, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Sheet onClose={onCancel} fit>
+      <div className="product-form-fit">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: FW_BOLD, color: LABEL }}>{initial?.id ? 'Editar produto' : 'Novo produto'}</h2>
+          <button onClick={onCancel} style={{ width: 28, height: 28, borderRadius: 50, background: FILL2, color: CAPTION, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {Ic.close}
           </button>
         </div>
 
-        {/* Icon picker */}
-        <div style={{ ...GLASS, background: 'rgba(12, 18, 32, 0.88)', borderRadius: 24, padding: 16, marginBottom: 12 }}>
-          <Field label="Ícone">
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {ICONS_LIST.map(ic => (
-                <button key={ic} onClick={() => setForm(f => ({ ...f, icon: ic }))}
-                  style={{ width: 40, height: 40, borderRadius: 11, background: form.icon === ic ? 'rgba(var(--tok-blue-rgb),0.15)' : FILL, border: `2px solid ${form.icon === ic ? BLUE : 'transparent'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .12s' }}
-                >
-                  <ProdIcon iconKey={ic} size={18} color={form.icon === ic ? BLUE : AMBER} />
-                </button>
-              ))}
-            </div>
-          </Field>
-        </div>
-
-        <div style={{ ...GLASS, background: 'rgba(12, 18, 32, 0.88)', borderRadius: 24, padding: 16, marginBottom: 12 }}>
-          <Field label="Nome do produto">
-            <input className="form-field" style={inp} placeholder="Ex: Álcool 70%" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
-          </Field>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Categoria">
-              <select className="form-field" style={{ ...inp, appearance: 'none' }} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as Category }))}>
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
+        <div style={{ ...GLASS, background: 'rgba(12, 18, 32, 0.88)', borderRadius: 18, padding: '12px 12px 10px', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr', gap: 10 }}>
+            <Field label="Nome" tight>
+              <input className="form-field" style={inp} placeholder="Ex: Álcool 70%" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
-            <Field label="Unidade">
+            <Field label="Unidade" tight>
               <select className="form-field" style={{ ...inp, appearance: 'none' }} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value as Unit }))}>
                 {UNITS.map(u => <option key={u}>{u}</option>)}
               </select>
             </Field>
           </div>
 
+          <Field label={`Categoria · ${currentCat}`} tight>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px', marginBottom: 10 }}>
+              {categories.map(c => {
+                const on = c === currentCat
+                const tint = catAccent(c)
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => { setForm(f => ({ ...f, category: c })); setCatMode('idle'); setCatMsg('') }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 14,
+                      fontSize: 13, fontWeight: on ? FW_BOLD : FW_NORMAL, textAlign: 'left',
+                      background: on ? 'rgba(8,16,36,0.92)' : 'rgba(8,16,36,0.35)',
+                      color: LABEL, border: `1.5px solid ${on ? tint : BORDER}`, cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: 99, background: tint, flexShrink: 0 }} />
+                    {c}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" style={miniBtn} onClick={() => { setCatMode('create'); setCatDraft(''); setCatMsg('') }}>
+                {Ic.plus} Criar
+              </button>
+              <button type="button" style={miniBtn} onClick={() => { setCatMode('edit'); setCatDraft(currentCat); setCatMsg('') }}>
+                {Ic.edit} Editar
+              </button>
+              <button type="button" style={{ ...miniBtn, color: CORAL }} onClick={removeCurrent}>
+                {Ic.trash} Retirar
+              </button>
+            </div>
+            {catMode !== 'idle' && (
+              <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="form-field"
+                  autoFocus
+                  placeholder={catMode === 'create' ? 'Nome da nova categoria' : 'Novo nome'}
+                  value={catDraft}
+                  onChange={e => setCatDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') applyCatName(); if (e.key === 'Escape') setCatMode('idle') }}
+                  style={{ ...inp, flex: 1 }}
+                />
+                <button type="button" onClick={applyCatName} style={{ ...miniBtn, flex: 'none', padding: '8px 12px', background: INK, color: INK_FG, border: 'none' }}>OK</button>
+              </div>
+            )}
+            {catMsg && <p style={{ margin: '8px 0 0', fontSize: 11, color: CORAL }}>{catMsg}</p>}
+          </Field>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            <Field label="Quantidade">
+            <Field label="Qtd." tight>
               <input className="form-field" type="number" min="0" style={inp} value={form.stock ?? 0} onChange={e => setForm(f => ({ ...f, stock: +e.target.value }))}
                 onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
-            <Field label="Estoque mínimo">
+            <Field label="Mínimo" tight>
               <input className="form-field" type="number" min="0" style={inp} value={form.minStock ?? 5} onChange={e => setForm(f => ({ ...f, minStock: +e.target.value }))}
                 onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
-            <Field label="Estoque ideal">
+            <Field label="Ideal" tight>
               <input className="form-field" type="number" min="0" style={inp} value={form.idealStock ?? form.minStock ?? 5} onChange={e => setForm(f => ({ ...f, idealStock: +e.target.value }))}
                 onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
           </div>
 
-          <Field label="Observações">
-            <textarea className="form-field" style={{ ...inp, height: 76, resize: 'none' }} placeholder="Marca, fornecedor, referência…" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+          <Field label="Observações" tight>
+            <input className="form-field" style={inp} placeholder="Marca, fornecedor…" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
           </Field>
         </div>
@@ -780,7 +938,7 @@ function ProductForm({ initial, onSave, onCancel }: {
         <button
           onClick={() => form.name?.trim() && onSave(form)}
           disabled={!form.name?.trim()}
-          style={{ width: '100%', padding: '16px', borderRadius: 999, background: form.name?.trim() ? INK : FILL2, color: form.name?.trim() ? INK_FG : CAPTION, fontSize: 16, fontWeight: FW_BOLD, transition: 'all .2s' }}
+          style={{ flexShrink: 0, width: '100%', marginTop: 8, padding: '12px', borderRadius: 999, background: form.name?.trim() ? INK : FILL2, color: form.name?.trim() ? INK_FG : CAPTION, fontSize: 15, fontWeight: FW_BOLD }}
         >
           {initial?.id ? 'Salvar alterações' : 'Adicionar produto'}
         </button>
@@ -791,14 +949,24 @@ function ProductForm({ initial, onSave, onCancel }: {
 
 // ─── Estoque Screen ───────────────────────────────────────────────────────────
 
-function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
+function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0, categories, onCreateCategory, onRenameCategory, onRemoveCategory }: {
   products: Product[]; movements: Movement[]
   onUpdate: (p: Product[], m: Movement[]) => void
   openNewKey?: number
+  categories: string[]
+  onCreateCategory: (name: string) => string | null
+  onRenameCategory: (from: string, to: string) => string | null
+  onRemoveCategory: (name: string) => string | null
 }) {
   const [search, setSearch]     = useState('')
-  const [filter, setFilter]     = useState<FilterType>('todos')
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchWrapRef = useRef<HTMLDivElement>(null)
+  const searchBtnRef = useRef<HTMLButtonElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const filter: FilterType = 'todos'
+  const [categoryFilter, setCategoryFilter] = useState<'todos' | Category>('todos')
+  const [catsOpen, setCatsOpen] = useState(false)
+  const catWrapRef = useRef<HTMLDivElement>(null)
   const [reportMonth, setReportMonth] = useState(new Date().getMonth())
   const [monthsOpen, setMonthsOpen] = useState(false)
   const monthWrapRef = useRef<HTMLDivElement>(null)
@@ -810,13 +978,24 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
   }, [openNewKey])
 
   useEffect(() => {
-    if (!monthsOpen) return
+    if (!monthsOpen && !catsOpen && !searchOpen) return
     const onDoc = (e: MouseEvent) => {
-      if (!monthWrapRef.current?.contains(e.target as Node)) setMonthsOpen(false)
+      const t = e.target as Node
+      if (monthsOpen && !monthWrapRef.current?.contains(t)) setMonthsOpen(false)
+      if (catsOpen && !catWrapRef.current?.contains(t)) setCatsOpen(false)
+      if (searchOpen && !searchWrapRef.current?.contains(t) && !searchBtnRef.current?.contains(t) && !search.trim()) setSearchOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [monthsOpen])
+  }, [monthsOpen, catsOpen, searchOpen, search])
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus()
+  }, [searchOpen])
+
+  useEffect(() => {
+    if (categoryFilter !== 'todos' && !categories.includes(categoryFilter)) setCategoryFilter('todos')
+  }, [categories, categoryFilter])
 
   const filtered = useMemo(() => products.filter(p => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase())
@@ -824,10 +1003,14 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
     const mf = filter === 'todos' || (filter === 'normal' && s === 'ok') ||
                (filter === 'atencao' && s === 'low') || (filter === 'critico' && s === 'critical') ||
                (filter === 'zerado' && s === 'empty')
-    return ms && mf
-  }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [products, search, filter])
+    const cf = categoryFilter === 'todos' || p.category === categoryFilter
+    return ms && mf && cf
+  }), [products, search, filter, categoryFilter])
+
+  const grouped = useMemo(() => groupByCategory(filtered, categories), [filtered, categories])
 
   const criticalCount = products.filter(p => stockStatus(p) === 'critical' || stockStatus(p) === 'empty').length
+  const atIdealCount = products.filter(p => p.stock >= idealStockOf(p)).length
 
   const doAdjust = (pr: Product, mode: AdjustMode) => {
     const mv: Movement = {
@@ -845,7 +1028,7 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
 
   const doSave = (data: Partial<Product>) => {
     if (editing === 'new') {
-      const p: Product = { id: uid(), name: data.name||'', category: data.category||'Limpeza', unit: data.unit||'un', stock: data.stock||0, minStock: data.minStock||5, idealStock: data.idealStock ?? data.minStock ?? 5, used: 0, icon: data.icon||'bottle', notes: data.notes||'' }
+      const p: Product = { id: uid(), name: data.name||'', category: data.category|| categories[0] || 'Limpeza', unit: data.unit||'un', stock: data.stock||0, minStock: data.minStock||5, idealStock: data.idealStock ?? data.minStock ?? 5, used: 0, icon: data.icon||'bottle', notes: data.notes||'' }
       onUpdate([...products, p], movements)
     } else if (editing && typeof editing === 'object') {
       onUpdate(products.map(p => p.id === (editing as Product).id ? { ...p, ...data } : p), movements)
@@ -858,69 +1041,105 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
     setSelected(null)
   }
 
-  const chips: { id: FilterType; label: string }[] = [
-    { id: 'todos', label: 'Todos' }, { id: 'normal', label: 'Normal' },
-    { id: 'atencao', label: 'Atenção' }, { id: 'critico', label: 'Crítico' }, { id: 'zerado', label: 'Zerado' },
-  ]
-
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 118px' }}>
-      {/* Search bar */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: CAPTION, pointerEvents: 'none' }}>
-            {Ic.search}
-          </div>
-          <input
-            placeholder="Buscar produto…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', boxSizing: 'border-box', padding: '13px 16px 13px 40px', borderRadius: 999, border: `1px solid ${BORDER}`, background: CARD, backdropFilter: 'blur(24px)', fontSize: 15, color: LABEL, outline: 'none', boxShadow: SHADOW }}
-          />
-          {search && (
-            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: CAPTION, display: 'flex', alignItems: 'center' }}>
-              {Ic.close}
-            </button>
-          )}
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 8px 6px', gap: 4 }}>
+        <RingStat
+          label="Produtos"
+          display={String(products.length)}
+          color="#4ECDC4"
+          pct={1}
+          icon={Ic.box}
+          title="Quantidade de produtos cadastrados"
+        />
+        <RingStat
+          label="Críticos"
+          display={String(criticalCount)}
+          color="#E88984"
+          pct={products.length ? criticalCount / products.length : 0}
+          icon={Ic.warn}
+          title="Produtos abaixo do mínimo ou zerados"
+        />
+        <RingStat
+          label="no ideal"
+          display={String(atIdealCount)}
+          color="#5BD38A"
+          pct={products.length ? atIdealCount / products.length : 0}
+          icon={Ic.shield}
+          title="Produtos com estoque igual ou acima do ideal"
+        />
       </div>
-
-      {/* Summary tiles */}
-      <div style={{ display: 'flex', gap: 10, margin: '0 16px 16px' }}>
-        {[
-          { label: 'Produtos', value: products.length, color: BLUE, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> },
-          { label: 'Críticos',  value: criticalCount, color: criticalCount > 0 ? CORAL : CAPTION, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
-        ].map(t => (
-          <div key={t.label} style={{ flex: 1, ...GLASS, borderRadius: 24, padding: '16px 14px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 32, fontWeight: FW_BOLD, color: t.color, lineHeight: 1, letterSpacing: -1 }}>{t.value}</div>
-              <div style={{ color: t.color, opacity: 0.75 }}>{t.icon}</div>
-            </div>
-            <div style={{ fontSize: 12, color: CAPTION, fontWeight: FW_LIGHT }}>{t.label}</div>
-          </div>
-        ))}
-      </div>
+      <p style={{ margin: '0 12px 14px', fontSize: 11, color: 'rgba(255,250,246,0.78)', textAlign: 'center', fontWeight: FW_NORMAL, lineHeight: 1.35 }}>
+        cadastrados · abaixo do mínimo · estoque ≥ ideal
+      </p>
 
       {/* Filter chips — retractable */}
-      <div style={{ display: 'flex', gap: 7, padding: '0 16px', marginBottom: 14, paddingBottom: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        {chips.filter(c => c.id === filter).map(c => (
+      <div className="estoque-toolbar">
+        <div ref={catWrapRef} style={{ position: 'relative', flexShrink: 0, zIndex: 51 }}>
           <button
-            key={c.id}
-            onClick={() => { setFiltersOpen(o => !o); setMonthsOpen(false) }}
-            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_BOLD, background: INK, color: INK_FG, transition: 'all .15s', border: 'none', cursor: 'pointer' }}
+            className="toolbar-chip"
+            onClick={() => { setCatsOpen(o => !o); setMonthsOpen(false) }}
           >
-            {c.id !== 'todos' && <div style={{ width: 7, height: 7, borderRadius: '50%', background: INK_FG, opacity: 0.85 }} />}
-            {c.label}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+            {Ic.funnel}
+            {categoryFilter === 'todos' ? 'Todos' : categoryFilter}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: catsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
-        ))}
+          {catsOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                left: 0,
+                zIndex: 52,
+                width: 228,
+                padding: 10,
+                ...GLASS,
+                borderRadius: 20,
+                animation: 'fadeIn .16s ease',
+              }}
+            >
+              <p style={{ margin: '2px 6px 10px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, letterSpacing: 0.6, textTransform: 'uppercase' }}>Categoria</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {(['todos', ...categories] as const).map(c => {
+                  const on = categoryFilter === c
+                  const label = c === 'todos' ? 'Todos' : c
+                  const tint = c === 'todos' ? '#FFFBFA' : catAccent(c)
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => { setCategoryFilter(c); setCatsOpen(false) }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        fontSize: 13,
+                        fontWeight: on ? FW_BOLD : FW_NORMAL,
+                        background: on ? INK : 'transparent',
+                        color: on ? INK_FG : LABEL,
+                        border: on ? 'none' : `1px solid ${BORDER}`,
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: 99, background: tint, flexShrink: 0 }} />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
         <div ref={monthWrapRef} style={{ position: 'relative', flexShrink: 0, zIndex: 50 }}>
           <button
-            onClick={() => { setMonthsOpen(o => !o); setFiltersOpen(false) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_BOLD, background: INK, color: INK_FG, border: 'none', cursor: 'pointer' }}
+            className="toolbar-chip"
+            onClick={() => { setMonthsOpen(o => !o); setCatsOpen(false) }}
           >
+            {Ic.calendar}
             {MONTHS[reportMonth].short}
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: monthsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
               <polyline points="6 9 12 15 18 9" />
@@ -967,49 +1186,88 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
             </div>
           )}
         </div>
+        <span className="estoque-toolbar-spacer" />
         <button
+          className="toolbar-chip toolbar-chip--icon"
+          aria-label="Baixar PDF"
+          title="Baixar PDF"
           onClick={() => generatePDF(filtered, filter, movements, reportMonth)}
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, background: INK, color: INK_FG, fontWeight: FW_BOLD, fontSize: 13, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Baixar PDF
         </button>
-        {filtersOpen && chips.filter(c => c.id !== filter).map(c => {
-          const dotColor = c.id === 'normal' ? '#D7C4A8' : c.id === 'atencao' ? '#E8B07A' : c.id === 'critico' ? '#E88984' : c.id === 'zerado' ? 'rgba(255,255,255,0.45)' : INK_FG
-          return (
-            <button
-              key={c.id}
-              onClick={() => { setFilter(c.id); setFiltersOpen(false) }}
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_LIGHT, background: CARD, color: SUBLABEL, transition: 'all .15s', border: `1px solid ${BORDER}`, backdropFilter: 'blur(20px)' }}
-            >
-              {c.id !== 'todos' && <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor }} />}
-              {c.label}
-            </button>
-          )
-        })}
+        <button
+          ref={searchBtnRef}
+          className={`toolbar-chip toolbar-chip--icon${searchOpen || search ? ' toolbar-chip--on' : ''}`}
+          aria-label="Buscar produto"
+          aria-expanded={searchOpen}
+          onClick={() => {
+            setSearchOpen(o => !o)
+            setCatsOpen(false)
+            setMonthsOpen(false)
+          }}
+        >
+          {Ic.search}
+        </button>
       </div>
 
+      {searchOpen && (
+        <div ref={searchWrapRef} style={{ padding: '0 16px 12px' }}>
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: CAPTION, pointerEvents: 'none' }}>
+              {Ic.search}
+            </div>
+            <input
+              ref={searchInputRef}
+              placeholder="Buscar produto…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { setSearchOpen(false); if (!search.trim()) setSearch('') } }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 40px 11px 40px', borderRadius: 999, border: `1px solid ${BORDER}`, background: CARD, backdropFilter: 'blur(24px)', fontSize: 15, color: LABEL, outline: 'none', boxShadow: SHADOW }}
+            />
+            <button
+              onClick={() => { setSearch(''); setSearchOpen(false) }}
+              aria-label="Fechar busca"
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: CAPTION, display: 'flex', alignItems: 'center' }}
+            >
+              {Ic.close}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Product list — individual cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 16px' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '52px 20px', color: CAPTION, ...GLASS, borderRadius: 24 }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
             <p style={{ margin: 0, fontSize: 16, fontWeight: FW_LIGHT }}>Nenhum produto encontrado</p>
           </div>
         ) : (
-          filtered.map(p => (
-            <ProductRow
-              key={p.id}
-              product={p}
-              onSelect={() => setSelected(p)}
-              onAdd={() => doAdjust(p, 'add')}
-              onRemove={() => doAdjust(p, 'remove')}
-            />
-          ))
+          grouped.map(({ category, items }) => {
+            const tint = catAccent(category)
+            return (
+              <div key={category} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="cat-section-head">
+                  <span className="cat-section-dot" style={{ background: tint }} />
+                  <span className="cat-section-name">{category}</span>
+                  <span className="cat-section-count">{items.length}</span>
+                </div>
+                {items.map(p => (
+                  <ProductRow
+                    key={p.id}
+                    product={p}
+                    onSelect={() => setSelected(p)}
+                    onAdd={() => doAdjust(p, 'add')}
+                    onRemove={() => doAdjust(p, 'remove')}
+                  />
+                ))}
+              </div>
+            )
+          })
         )}
       </div>
 
@@ -1026,7 +1284,15 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
         />
       )}
       {editing !== undefined && (
-        <ProductForm initial={editing !== 'new' ? (editing as Product) : undefined} onSave={doSave} onCancel={() => setEditing(undefined)} />
+        <ProductForm
+          initial={editing !== 'new' ? (editing as Product) : undefined}
+          onSave={doSave}
+          onCancel={() => setEditing(undefined)}
+          categories={categories}
+          onCreateCategory={onCreateCategory}
+          onRenameCategory={onRenameCategory}
+          onRemoveCategory={onRemoveCategory}
+        />
       )}
     </div>
   )
@@ -1139,7 +1405,14 @@ function AlertasScreen({ products }: { products: Product[] }) {
 
 // ─── Ajustes Screen ───────────────────────────────────────────────────────────
 
-function AjustesScreen({ products, isDark, setDark }: { products: Product[]; isDark: boolean; setDark: (v: boolean) => void }) {
+function AjustesScreen({ products, isDark, setDark, onRestoreMonthList, onFillIdeal }: {
+  products: Product[]
+  isDark: boolean
+  setDark: (v: boolean) => void
+  onRestoreMonthList: () => void
+  onFillIdeal: () => void
+}) {
+  const [note, setNote] = useState('')
   const rows = [
     { label: 'Total de produtos',   value: `${products.length}` },
     { label: 'Itens com alerta',    value: `${products.filter(p => stockStatus(p) !== 'ok').length}` },
@@ -1152,6 +1425,19 @@ function AjustesScreen({ products, isDark, setDark }: { products: Product[]; isD
       style={{ width: 50, height: 30, borderRadius: 15, background: isDark ? INK : 'rgba(120,120,128,0.28)', position: 'relative', transition: 'background .2s', flexShrink: 0 }}
     >
       <div style={{ position: 'absolute', top: 3, left: isDark ? 23 : 3, width: 24, height: 24, borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.22)', transition: 'left .2s cubic-bezier(.34,1.4,.64,1)' }} />
+    </button>
+  )
+
+  const Action = ({ title, hint, onClick }: { title: string; hint: string; onClick: () => void }) => (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', padding: '14px 16px',
+        background: 'transparent', border: 'none', cursor: 'pointer',
+      }}
+    >
+      <p style={{ margin: 0, fontSize: 15, color: LABEL, fontWeight: FW_BOLD }}>{title}</p>
+      <p style={{ margin: '3px 0 0', fontSize: 12, color: CAPTION, fontWeight: FW_LIGHT, lineHeight: 1.35 }}>{hint}</p>
     </button>
   )
 
@@ -1177,6 +1463,30 @@ function AjustesScreen({ products, isDark, setDark }: { products: Product[]; isD
           <Toggle />
         </div>
       </div>
+
+      <p style={{ margin: '0 4px 8px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 0.8 }}>Início do mês</p>
+      <div style={{ ...GLASS, borderRadius: 24, overflow: 'hidden', marginBottom: 12 }}>
+        <Action
+          title="Voltar à lista do mês"
+          hint="Restaura o cadastro original dos produtos (nomes, mínimos, ideais e quantidades da lista configurada)."
+          onClick={() => {
+            if (!confirm('Restaurar a lista original do mês? Alterações no cadastro serão substituídas pela configuração salva no app.')) return
+            onRestoreMonthList()
+            setNote('Lista do mês restaurada.')
+          }}
+        />
+        <div style={{ height: 1, background: BORDER, margin: '0 16px' }} />
+        <Action
+          title="Estoque cheio"
+          hint="Coloca cada produto no estoque ideal e zera o uso — para começar o mês com o almoxarifado completo."
+          onClick={() => {
+            if (!confirm('Preencher o estoque com o ideal e zerar o uso de todos os produtos?')) return
+            onFillIdeal()
+            setNote('Estoque preenchido no ideal. Uso zerado.')
+          }}
+        />
+      </div>
+      {note && <p style={{ margin: '0 4px', fontSize: 13, color: '#4ECDC4' }}>{note}</p>}
     </div>
   )
 }
@@ -1291,24 +1601,26 @@ function generatePDF(products: Product[], filter: FilterType = 'todos', movement
     margin: { left: 14, right: 14 },
   })
 
-  const afterTable = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 78) + 12
-
+  doc.addPage()
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.setTextColor(139, 21, 16)
-  doc.text('Deve comprar', 14, afterTable)
+  doc.setFontSize(16)
+  doc.setTextColor(20)
+  doc.text('Deve comprar', 14, 16)
+  doc.setFontSize(11)
+  doc.text('Colégio Journey', 14, 22)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
+  doc.setFontSize(9)
   doc.setTextColor(90)
-  doc.text('Quantidade para completar o estoque ideal (sempre cheio).', 14, afterTable + 5)
+  doc.text(`Competência: ${monthMeta.full} ${year}`, 14, 28)
+  doc.text('Quantidade para completar o estoque ideal (sempre cheio).', 14, 33)
   doc.setTextColor(20)
 
   if (toBuyList.length === 0) {
     doc.setFontSize(10)
-    doc.text('Nenhum item abaixo do estoque ideal.', 14, afterTable + 14)
+    doc.text('Nenhum item abaixo do estoque ideal.', 14, 42)
   } else {
     autoTable(doc, {
-      startY: afterTable + 8,
+      startY: 40,
       head: [['Produto', 'Atual', 'Ideal', 'Deve comprar']],
       body: toBuyList.map(p => [
         p.name,
@@ -1342,6 +1654,9 @@ export default function App() {
   const [tab, setTab]           = useState<Tab>('estoque')
   const [products, setProducts] = useState<Product[]>(persisted?.products ?? initialProducts)
   const [movements, setMovements] = useState<Movement[]>(persisted?.movements ?? initialMovements)
+  const [categories, setCategories] = useState<string[]>(() =>
+    uniqueCategories([...(persisted?.categories ?? DEFAULT_CATEGORIES), ...(persisted?.products ?? initialProducts).map(p => p.category)])
+  )
   const [dark, setDark]         = useState(persisted?.dark ?? true)
   const [openNewKey, setOpenNewKey] = useState(0)
 
@@ -1359,12 +1674,39 @@ export default function App() {
   }, [dark])
 
   useEffect(() => {
-    saveState({ products, movements, dark })
-  }, [products, movements, dark])
+    saveState({ products, movements, dark, categories })
+  }, [products, movements, dark, categories])
 
   const alertCount = products.filter(p => { const s = stockStatus(p); return s === 'critical' || s === 'empty' }).length
 
   const handleUpdate = (p: Product[], m: Movement[]) => { setProducts(p); setMovements(m) }
+
+  const onCreateCategory = (name: string): string | null => {
+    const t = name.trim()
+    if (!t) return null
+    if (categories.some(c => c.toLocaleLowerCase('pt-BR') === t.toLocaleLowerCase('pt-BR'))) return null
+    setCategories(cs => [...cs, t])
+    return t
+  }
+
+  const onRenameCategory = (from: string, to: string): string | null => {
+    const t = to.trim()
+    if (!t) return null
+    const clash = categories.some(c => c !== from && c.toLocaleLowerCase('pt-BR') === t.toLocaleLowerCase('pt-BR'))
+    if (clash) return null
+    setCategories(cs => cs.map(c => c === from ? t : c))
+    setProducts(ps => ps.map(p => p.category === from ? { ...p, category: t } : p))
+    return t
+  }
+
+  const onRemoveCategory = (name: string): string | null => {
+    if (categories.length <= 1) return null
+    const rest = categories.filter(c => c !== name)
+    const fallback = rest[0]
+    setCategories(rest)
+    setProducts(ps => ps.map(p => p.category === name ? { ...p, category: fallback } : p))
+    return fallback
+  }
 
   return (
     <div style={{ display: 'flex', height: '100dvh', background: 'transparent', fontFamily: 'var(--font-sans)' }}>
@@ -1412,11 +1754,7 @@ export default function App() {
               alt="Colégio Journey"
               style={{ height: 56, width: 'auto', maxWidth: 'min(280px, 70vw)', display: 'block', objectFit: 'contain' }}
             />
-            {tab === 'estoque' ? (
-              <p style={{ margin: '10px 0 0', fontSize: 13, color: CAPTION, fontWeight: FW_LIGHT }}>
-                {products.length} produtos cadastrados
-              </p>
-            ) : (
+            {tab !== 'estoque' && (
               <p className="kicker" style={{ marginTop: 10 }}>{PAGE_KICKER[tab]} · {PAGE_TITLE[tab]}</p>
             )}
           </div>
@@ -1425,11 +1763,26 @@ export default function App() {
         {/* Screen */}
         <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', paddingTop: 14 }}>
           <div style={{ flex: 1, minHeight: 0, display: tab === 'estoque' ? 'flex' : 'none', flexDirection: 'column', overflow: 'hidden' }}>
-            <EstoqueScreen products={products} movements={movements} onUpdate={handleUpdate} openNewKey={openNewKey} />
+            <EstoqueScreen
+              products={products}
+              movements={movements}
+              onUpdate={handleUpdate}
+              openNewKey={openNewKey}
+              categories={categories}
+              onCreateCategory={onCreateCategory}
+              onRenameCategory={onRenameCategory}
+              onRemoveCategory={onRemoveCategory}
+            />
           </div>
           {tab === 'movimentacoes' && <MovimentacoesScreen products={products} movements={movements} />}
           {tab === 'alertas'       && <AlertasScreen       products={products} />}
-          {tab === 'ajustes'       && <AjustesScreen       products={products} isDark={dark} setDark={setDark} />}
+          {tab === 'ajustes'       && <AjustesScreen       products={products} isDark={dark} setDark={setDark} onRestoreMonthList={() => {
+            const restored = initialProducts.map(p => ({ ...p }))
+            setProducts(restored)
+            setCategories(uniqueCategories([...DEFAULT_CATEGORIES, ...restored.map(p => p.category)]))
+          }} onFillIdeal={() => {
+            setProducts(ps => ps.map(p => ({ ...p, stock: idealStockOf(p), used: 0 })))
+          }} />}
         </main>
 
         {/* Bottom nav — mobile only via CSS */}

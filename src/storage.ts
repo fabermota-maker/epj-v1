@@ -4,6 +4,7 @@ export interface StoredState<P, M> {
   products: P[]
   movements: M[]
   dark: boolean
+  categories?: string[]
 }
 
 export function loadState<P, M>(): StoredState<P, M> | null {
@@ -19,6 +20,9 @@ export function loadState<P, M>(): StoredState<P, M> | null {
         date: new Date(m.date),
       })) as M[],
       dark: parsed.dark !== false,
+      categories: Array.isArray((parsed as StoredState<P, M>).categories)
+        ? (parsed as StoredState<P, M>).categories
+        : undefined,
     }
   } catch {
     return null
