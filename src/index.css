@@ -1,0 +1,200 @@
+@import url('https://fonts.googleapis.com/css2?family=REM:ital,wght@0,300;0,400;0,700;1,300&display=swap');
+@import 'tailwindcss';
+
+/* ── Dusk glass (default) — matches the reference atmosphere ── */
+:root {
+  --tok-bg:         #2a1c22;
+  --tok-card:       rgba(255, 248, 242, 0.16);
+  --tok-sidebar:    rgba(28, 18, 22, 0.42);
+  --tok-header-bg:  rgba(28, 18, 22, 0.22);
+  --tok-nav-bg:     rgba(255, 248, 242, 0.16);
+  --tok-blue:       #F0D5C4;
+  --tok-blue-rgb:   240, 213, 196;
+  --tok-amber:      #F0C9A0;
+  --tok-coral:      #E88984;
+  --tok-label:      #FFFBFA;
+  --tok-sublabel:   rgba(255, 250, 246, 0.86);
+  --tok-caption:    rgba(255, 244, 236, 0.62);
+  --tok-fill:       rgba(255, 255, 255, 0.08);
+  --tok-fill2:      rgba(255, 255, 255, 0.14);
+  --tok-border:     rgba(255, 255, 255, 0.32);
+  --tok-shadow:     0 10px 40px rgba(18, 10, 12, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --tok-ink:        #1A1614;
+  --tok-ink-fg:     #FFFBFA;
+  --font-sans:      'REM', sans-serif;
+  --font-display:   'REM', sans-serif;
+  --fw-light:       300;
+  --fw-normal:      400;
+  --fw-bold:        700;
+  --atmosphere:     url('/atmosphere.webp');
+  --atmosphere-veil: linear-gradient(180deg, rgba(42, 24, 32, 0.12) 0%, rgba(22, 14, 18, 0.28) 100%);
+}
+
+/* ── Light glass — same language, sand + readable dark type ── */
+:root[data-theme="light"] {
+  --tok-bg:         #E8D5C4;
+  --tok-card:       rgba(255, 250, 244, 0.62);
+  --tok-sidebar:    rgba(255, 248, 240, 0.55);
+  --tok-header-bg:  rgba(255, 248, 240, 0.38);
+  --tok-nav-bg:     rgba(255, 250, 244, 0.58);
+  --tok-blue:       #6B4A3A;
+  --tok-blue-rgb:   107, 74, 58;
+  --tok-amber:      #9A6B2F;
+  --tok-coral:      #B84E42;
+  --tok-label:      #1C1612;
+  --tok-sublabel:   #3D322C;
+  --tok-caption:    #6B5A50;
+  --tok-fill:       rgba(40, 28, 22, 0.06);
+  --tok-fill2:      rgba(40, 28, 22, 0.10);
+  --tok-border:     rgba(255, 255, 255, 0.55);
+  --tok-shadow:     0 10px 36px rgba(80, 48, 32, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --tok-ink:        #1A1614;
+  --tok-ink-fg:     #FFFBFA;
+  --atmosphere-veil: linear-gradient(180deg, rgba(255, 244, 232, 0.18) 0%, rgba(232, 210, 190, 0.28) 100%);
+}
+
+@theme inline {
+  --font-sans: 'REM', sans-serif;
+  --color-bg: var(--tok-bg);
+  --color-card: var(--tok-card);
+  --color-primary: var(--tok-ink);
+  --color-warning: var(--tok-amber);
+  --color-danger: var(--tok-coral);
+  --color-success: #B8D4C8;
+  --color-label: var(--tok-label);
+  --color-secondary-label: var(--tok-sublabel);
+  --color-tertiary-label: var(--tok-caption);
+  --color-separator: var(--tok-border);
+  --color-fill: var(--tok-fill);
+  --color-fill-secondary: var(--tok-fill2);
+  --radius-card: 24px;
+  --radius-inner: 18px;
+  --radius-btn: 999px;
+  --shadow-card: var(--tok-shadow);
+  --shadow-lifted: 0 16px 48px rgba(18, 10, 12, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-weight: var(--fw-normal);
+  background: var(--tok-bg);
+  color: var(--tok-label);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    var(--atmosphere-veil),
+    var(--atmosphere) center / cover no-repeat,
+    radial-gradient(ellipse at 20% 80%, rgba(232, 140, 160, 0.45), transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(196, 168, 200, 0.35), transparent 45%),
+    linear-gradient(180deg, #c9a090 0%, #8a6a78 48%, #3a2a32 100%);
+}
+
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }
+
+input, textarea, select {
+  font-family: inherit;
+  outline: none;
+}
+
+button {
+  font-family: inherit;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.kicker {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: var(--fw-light);
+  letter-spacing: 0.32em;
+  text-transform: lowercase;
+  color: var(--tok-caption);
+}
+
+.display-title {
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+}
+
+.bottom-nav {
+  display: none;
+  left: 18px !important;
+  right: 18px !important;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--tok-border) !important;
+  box-shadow: var(--tok-shadow) !important;
+  backdrop-filter: blur(32px) saturate(1.4);
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  padding: 8px 10px !important;
+}
+
+.sidebar-desktop {
+  display: none;
+  backdrop-filter: blur(32px) saturate(1.3);
+  -webkit-backdrop-filter: blur(32px) saturate(1.3);
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tok-fill);
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--tok-ink);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(26, 22, 20, 0.35);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-fade-in { animation: fadeIn 0.2s ease; }
+.animate-pulse-soft { animation: pulse-soft 2s ease infinite; }
