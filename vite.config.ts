@@ -3,13 +3,21 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
+import fs from 'node:fs'
 
-import siteConfiguration from './.figma/make/site.json'
+function loadFigmaSite() {
+  const file = path.resolve(__dirname, '.figma/make/site.json')
+  if (!fs.existsSync(file)) {
+    return { title: 'Estoque Journey', language: 'pt' }
+  }
+  return JSON.parse(fs.readFileSync(file, 'utf8'))
+}
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
+  const siteConfiguration = loadFigmaSite()
 
   return {
     base: process.env.BASE_PATH || (process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/'),
