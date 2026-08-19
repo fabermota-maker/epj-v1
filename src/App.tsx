@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { loadState, saveState } from './storage'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -8,6 +10,21 @@ type Unit = 'un' | 'L' | 'kg' | 'cx' | 'pct' | 'rolos' | 'pares' | 'm' | 'frasco
 type Tab = 'estoque' | 'movimentacoes' | 'alertas' | 'ajustes'
 type FilterType = 'todos' | 'normal' | 'atencao' | 'critico' | 'zerado'
 type AdjustMode = 'add' | 'remove' | 'consume'
+
+const MONTHS = [
+  { i: 0,  short: 'Jan', full: 'Janeiro' },
+  { i: 1,  short: 'Fev', full: 'Fevereiro' },
+  { i: 2,  short: 'Mar', full: 'Março' },
+  { i: 3,  short: 'Abr', full: 'Abril' },
+  { i: 4,  short: 'Mai', full: 'Maio' },
+  { i: 5,  short: 'Jun', full: 'Junho' },
+  { i: 6,  short: 'Jul', full: 'Julho' },
+  { i: 7,  short: 'Ago', full: 'Agosto' },
+  { i: 8,  short: 'Set', full: 'Setembro' },
+  { i: 9,  short: 'Out', full: 'Outubro' },
+  { i: 10, short: 'Nov', full: 'Novembro' },
+  { i: 11, short: 'Dez', full: 'Dezembro' },
+] as const
 
 interface Movement {
   id: string
@@ -25,6 +42,7 @@ interface Product {
   unit: Unit
   stock: number
   minStock: number
+  idealStock?: number
   used: number
   icon: string
   notes: string
@@ -105,6 +123,14 @@ function stockStatus(p: Product): 'ok' | 'low' | 'critical' | 'empty' {
 function stockPct(p: Product): number {
   const max = Math.max(p.stock, p.minStock * 3, 20)
   return Math.min(100, (p.stock / max) * 100)
+}
+
+function idealStockOf(p: Product): number {
+  return p.idealStock ?? p.minStock
+}
+
+function qtyToBuy(p: Product): number {
+  return Math.max(0, idealStockOf(p) - p.stock)
 }
 
 function uid() { return Math.random().toString(36).slice(2) }
@@ -387,8 +413,9 @@ function ProductRow({ product, onSelect, onAdd, onRemove }: {
 
   return (
     <div
+      className={s === 'critical' || s === 'empty' ? 'product-row--alert' : undefined}
       onClick={onSelect}
-      style={{ ...GLASS, borderRadius: 24, cursor: 'pointer', overflow: 'hidden', transition: 'transform .15s, box-shadow .15s' }}
+      style={{ ...GLASS, borderRadius: 24, cursor: 'pointer', overflow: 'hidden', transition: 'transform .15s' }}
       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}
     >
@@ -401,7 +428,7 @@ function ProductRow({ product, onSelect, onAdd, onRemove }: {
             {product.name}
           </div>
           <div style={{ fontSize: 12, color: CAPTION, fontWeight: FW_LIGHT }}>
-            {product.category} · min {product.minStock} {product.unit}
+            {product.category} · min {product.minStock} · ideal {idealStockOf(product)} {product.unit}
           </div>
         </div>
 
@@ -562,13 +589,14 @@ function DetailSheet({ product, movements, onClose, onEdit, onDelete, onAdd, onR
 
         {/* Big numbers */}
         <div style={{ ...GLASS, borderRadius: 24, padding: '20px 20px 18px', marginBottom: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', textAlign: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', textAlign: 'center', marginBottom: 16 }}>
             {[
               { label: 'Em estoque', val: product.stock,    bold: isCritical },
               { label: 'Utilizados',  val: product.used,    bold: false },
               { label: 'Mínimo',      val: product.minStock, bold: false },
+              { label: 'Ideal',       val: idealStockOf(product), bold: false },
             ].map((x, i) => (
-              <div key={x.label} style={{ borderRight: i < 2 ? `1px solid ${BORDER}` : 'none', paddingInline: 4 }}>
+              <div key={x.label} style={{ borderRight: i < 3 ? `1px solid ${BORDER}` : 'none', paddingInline: 4 }}>
                 <p style={{ margin: 0, fontSize: 28, fontWeight: FW_BOLD, color: x.bold ? '#D93025' : LABEL, lineHeight: 1, letterSpacing: -1 }}>{x.val}</p>
                 <p style={{ margin: '4px 0 0', fontSize: 11, color: CAPTION, fontWeight: FW_LIGHT }}>{x.label}</p>
               </div>
@@ -590,18 +618,17 @@ function DetailSheet({ product, movements, onClose, onEdit, onDelete, onAdd, onR
           <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 0.8 }}>Ações rápidas</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[
-              { label: 'Entrada',  action: onAdd,     bg: `rgba(var(--tok-blue-rgb),0.12)`,  color: BLUE,  icon: Ic.plus  },
-              { label: 'Retirada', action: onRemove,  bg: `rgba(255,106,106,0.12)`, color: CORAL, icon: Ic.minus },
-              { label: 'Consumo',  action: onConsume, bg: `rgba(245,184,0,0.12)`,   color: AMBER, icon: Ic.trend  },
+              { label: 'Entrada',  action: onAdd,     cls: 'quick-act quick-act--in',  color: '#FFFBFA', bg: 'rgba(26,22,20,0.72)' },
+              { label: 'Retirada', action: onRemove,  cls: 'quick-act quick-act--out', color: '#FFE8E6', bg: 'rgba(139,21,16,0.55)' },
+              { label: 'Consumo',  action: onConsume, cls: 'quick-act quick-act--use', color: '#FFF6E8', bg: 'rgba(107,74,26,0.55)' },
             ].map(a => (
               <button
                 key={a.label}
+                className={a.cls}
                 onClick={a.action}
-                style={{ background: a.bg, borderRadius: 14, padding: '14px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, color: a.color, transition: 'transform .12s' }}
-                onMouseEnter={e => (e.currentTarget.style.transform = 'scale(.96)')}
-                onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                style={{ background: a.bg, borderRadius: 14, padding: '14px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, color: a.color }}
               >
-                {a.icon}
+                {a.label === 'Entrada' ? Ic.plus : a.label === 'Retirada' ? Ic.minus : Ic.trend}
                 <span style={{ fontSize: 12, fontWeight: FW_BOLD }}>{a.label}</span>
               </button>
             ))}
@@ -625,7 +652,7 @@ function DetailSheet({ product, movements, onClose, onEdit, onDelete, onAdd, onR
                 const t = MOV_META[m.type]
                 return (
                   <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBlock: 9, borderTop: i > 0 ? `1px solid ${BORDER}` : 'none' }}>
-                    <span style={{ fontSize: 11, fontWeight: FW_BOLD, color: t.color, background: t.bg, padding: '3px 9px', borderRadius: 20, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: FW_BOLD, color: '#FFFBFA', background: m.type === 'consumo' || m.type === 'saida' ? '#8B1510' : '#1A1614', padding: '4px 10px', borderRadius: 20, flexShrink: 0 }}>
                       {t.label}
                     </span>
                     <p style={{ margin: 0, flex: 1, fontSize: 13, color: SUBLABEL, fontWeight: FW_LIGHT }}>
@@ -669,18 +696,18 @@ function ProductForm({ initial, onSave, onCancel }: {
   initial?: Partial<Product>; onSave: (p: Partial<Product>) => void; onCancel: () => void
 }) {
   const [form, setForm] = useState<Partial<Product>>({
-    name: '', category: 'Limpeza', unit: 'un', stock: 0, minStock: 5, icon: 'bottle', notes: '',
+    name: '', category: 'Limpeza', unit: 'un', stock: 0, minStock: 5, idealStock: 5, icon: 'bottle', notes: '',
     ...initial,
   })
 
   const inp: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box', padding: '13px 15px', borderRadius: 13,
-    border: `1.5px solid ${BORDER}`, background: 'rgba(255,255,255,0.05)', fontSize: 15, color: LABEL, outline: 'none',
+    border: '1.5px solid rgba(255,255,255,0.42)', background: 'rgba(10, 16, 28, 0.92)', fontSize: 15, color: '#FFFBFA', outline: 'none', colorScheme: 'dark',
   }
 
   const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
     <div style={{ marginBottom: 13 }}>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.7 }}>{label}</label>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: FW_BOLD, color: '#FFFBFA', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.7 }}>{label}</label>
       {children}
     </div>
   )
@@ -696,7 +723,7 @@ function ProductForm({ initial, onSave, onCancel }: {
         </div>
 
         {/* Icon picker */}
-        <div style={{ ...GLASS, borderRadius: 24, padding: 16, marginBottom: 12 }}>
+        <div style={{ ...GLASS, background: 'rgba(12, 18, 32, 0.88)', borderRadius: 24, padding: 16, marginBottom: 12 }}>
           <Field label="Ícone">
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {ICONS_LIST.map(ic => (
@@ -710,39 +737,43 @@ function ProductForm({ initial, onSave, onCancel }: {
           </Field>
         </div>
 
-        <div style={{ ...GLASS, borderRadius: 24, padding: 16, marginBottom: 12 }}>
+        <div style={{ ...GLASS, background: 'rgba(12, 18, 32, 0.88)', borderRadius: 24, padding: 16, marginBottom: 12 }}>
           <Field label="Nome do produto">
-            <input style={inp} placeholder="Ex: Álcool 70%" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              onFocus={e => (e.target.style.borderColor = BLUE)} onBlur={e => (e.target.style.borderColor = BORDER)} />
+            <input className="form-field" style={inp} placeholder="Ex: Álcool 70%" value={form.name || ''} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
           </Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="Categoria">
-              <select style={{ ...inp, appearance: 'none' }} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as Category }))}>
+              <select className="form-field" style={{ ...inp, appearance: 'none' }} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as Category }))}>
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Unidade">
-              <select style={{ ...inp, appearance: 'none' }} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value as Unit }))}>
+              <select className="form-field" style={{ ...inp, appearance: 'none' }} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value as Unit }))}>
                 {UNITS.map(u => <option key={u}>{u}</option>)}
               </select>
             </Field>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <Field label="Quantidade">
-              <input type="number" min="0" style={inp} value={form.stock ?? 0} onChange={e => setForm(f => ({ ...f, stock: +e.target.value }))}
-                onFocus={e => (e.target.style.borderColor = BLUE)} onBlur={e => (e.target.style.borderColor = BORDER)} />
+              <input className="form-field" type="number" min="0" style={inp} value={form.stock ?? 0} onChange={e => setForm(f => ({ ...f, stock: +e.target.value }))}
+                onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
             <Field label="Estoque mínimo">
-              <input type="number" min="0" style={inp} value={form.minStock ?? 5} onChange={e => setForm(f => ({ ...f, minStock: +e.target.value }))}
-                onFocus={e => (e.target.style.borderColor = BLUE)} onBlur={e => (e.target.style.borderColor = BORDER)} />
+              <input className="form-field" type="number" min="0" style={inp} value={form.minStock ?? 5} onChange={e => setForm(f => ({ ...f, minStock: +e.target.value }))}
+                onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
+            </Field>
+            <Field label="Estoque ideal">
+              <input className="form-field" type="number" min="0" style={inp} value={form.idealStock ?? form.minStock ?? 5} onChange={e => setForm(f => ({ ...f, idealStock: +e.target.value }))}
+                onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
             </Field>
           </div>
 
           <Field label="Observações">
-            <textarea style={{ ...inp, height: 76, resize: 'none' }} placeholder="Marca, fornecedor, referência…" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              onFocus={e => (e.target.style.borderColor = BLUE)} onBlur={e => (e.target.style.borderColor = BORDER)} />
+            <textarea className="form-field" style={{ ...inp, height: 76, resize: 'none' }} placeholder="Marca, fornecedor, referência…" value={form.notes || ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              onFocus={e => (e.target.style.borderColor = '#F0D5C4')} onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.42)')} />
           </Field>
         </div>
 
@@ -767,12 +798,25 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
 }) {
   const [search, setSearch]     = useState('')
   const [filter, setFilter]     = useState<FilterType>('todos')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [reportMonth, setReportMonth] = useState(new Date().getMonth())
+  const [monthsOpen, setMonthsOpen] = useState(false)
+  const monthWrapRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<Product | null>(null)
   const [editing, setEditing]   = useState<Product | 'new' | undefined>()
 
   useEffect(() => {
     if (openNewKey) setEditing('new')
   }, [openNewKey])
+
+  useEffect(() => {
+    if (!monthsOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!monthWrapRef.current?.contains(e.target as Node)) setMonthsOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [monthsOpen])
 
   const filtered = useMemo(() => products.filter(p => {
     const ms = p.name.toLowerCase().includes(search.toLowerCase())
@@ -783,9 +827,6 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
     return ms && mf
   }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [products, search, filter])
 
-  const today = new Date(); today.setHours(0,0,0,0)
-  const usedToday = movements.filter(m => m.date >= today && m.type !== 'entrada' && m.type !== 'ajuste')
-                             .reduce((a, m) => a + m.quantity, 0)
   const criticalCount = products.filter(p => stockStatus(p) === 'critical' || stockStatus(p) === 'empty').length
 
   const doAdjust = (pr: Product, mode: AdjustMode) => {
@@ -804,7 +845,7 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
 
   const doSave = (data: Partial<Product>) => {
     if (editing === 'new') {
-      const p: Product = { id: uid(), name: data.name||'', category: data.category||'Limpeza', unit: data.unit||'un', stock: data.stock||0, minStock: data.minStock||5, used: 0, icon: data.icon||'bottle', notes: data.notes||'' }
+      const p: Product = { id: uid(), name: data.name||'', category: data.category||'Limpeza', unit: data.unit||'un', stock: data.stock||0, minStock: data.minStock||5, idealStock: data.idealStock ?? data.minStock ?? 5, used: 0, icon: data.icon||'bottle', notes: data.notes||'' }
       onUpdate([...products, p], movements)
     } else if (editing && typeof editing === 'object') {
       onUpdate(products.map(p => p.id === (editing as Product).id ? { ...p, ...data } : p), movements)
@@ -826,36 +867,21 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
     <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 118px' }}>
       {/* Search bar */}
       <div style={{ padding: '0 16px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <div style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: CAPTION, pointerEvents: 'none' }}>
-              {Ic.search}
-            </div>
-            <input
-              placeholder="Buscar produto…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '13px 16px 13px 40px', borderRadius: 999, border: `1px solid ${BORDER}`, background: CARD, backdropFilter: 'blur(24px)', fontSize: 15, color: LABEL, outline: 'none', boxShadow: SHADOW }}
-            />
-            {search && (
-              <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: CAPTION, display: 'flex', alignItems: 'center' }}>
-                {Ic.close}
-              </button>
-            )}
+        <div style={{ position: 'relative' }}>
+          <div style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: CAPTION, pointerEvents: 'none' }}>
+            {Ic.search}
           </div>
-          <button
-            onClick={() => generatePDF(products)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '12px 18px', borderRadius: 999, background: INK, color: INK_FG, fontWeight: FW_BOLD, fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap', flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Baixar PDF
-          </button>
+          <input
+            placeholder="Buscar produto…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '13px 16px 13px 40px', borderRadius: 999, border: `1px solid ${BORDER}`, background: CARD, backdropFilter: 'blur(24px)', fontSize: 15, color: LABEL, outline: 'none', boxShadow: SHADOW }}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: CAPTION, display: 'flex', alignItems: 'center' }}>
+              {Ic.close}
+            </button>
+          )}
         </div>
       </div>
 
@@ -864,7 +890,6 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
         {[
           { label: 'Produtos', value: products.length, color: BLUE, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> },
           { label: 'Críticos',  value: criticalCount, color: criticalCount > 0 ? CORAL : CAPTION, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
-          { label: 'Mov. hoje', value: usedToday, color: usedToday > 0 ? AMBER : CAPTION, icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> },
         ].map(t => (
           <div key={t.label} style={{ flex: 1, ...GLASS, borderRadius: 24, padding: '16px 14px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -876,16 +901,92 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0 }: {
         ))}
       </div>
 
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: 7, padding: '0 16px', overflowX: 'auto', marginBottom: 14, paddingBottom: 2 }}>
-        {chips.map(c => {
-          const active = filter === c.id
+      {/* Filter chips — retractable */}
+      <div style={{ display: 'flex', gap: 7, padding: '0 16px', marginBottom: 14, paddingBottom: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        {chips.filter(c => c.id === filter).map(c => (
+          <button
+            key={c.id}
+            onClick={() => { setFiltersOpen(o => !o); setMonthsOpen(false) }}
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_BOLD, background: INK, color: INK_FG, transition: 'all .15s', border: 'none', cursor: 'pointer' }}
+          >
+            {c.id !== 'todos' && <div style={{ width: 7, height: 7, borderRadius: '50%', background: INK_FG, opacity: 0.85 }} />}
+            {c.label}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        ))}
+        <div ref={monthWrapRef} style={{ position: 'relative', flexShrink: 0, zIndex: 50 }}>
+          <button
+            onClick={() => { setMonthsOpen(o => !o); setFiltersOpen(false) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_BOLD, background: INK, color: INK_FG, border: 'none', cursor: 'pointer' }}
+          >
+            {MONTHS[reportMonth].short}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: monthsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {monthsOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                left: 0,
+                zIndex: 50,
+                width: 228,
+                padding: 10,
+                ...GLASS,
+                borderRadius: 20,
+                animation: 'fadeIn .16s ease',
+              }}
+            >
+              <p style={{ margin: '2px 6px 10px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, letterSpacing: 0.6, textTransform: 'uppercase' }}>Mês do relatório</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                {MONTHS.map(m => {
+                  const on = m.i === reportMonth
+                  return (
+                    <button
+                      key={m.i}
+                      onClick={() => { setReportMonth(m.i); setMonthsOpen(false) }}
+                      style={{
+                        padding: '10px 0',
+                        borderRadius: 12,
+                        fontSize: 13,
+                        fontWeight: on ? FW_BOLD : FW_NORMAL,
+                        background: on ? INK : 'transparent',
+                        color: on ? INK_FG : LABEL,
+                        border: on ? 'none' : `1px solid ${BORDER}`,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {m.short}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={() => generatePDF(filtered, filter, movements, reportMonth)}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, background: INK, color: INK_FG, fontWeight: FW_BOLD, fontSize: 13, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Baixar PDF
+        </button>
+        {filtersOpen && chips.filter(c => c.id !== filter).map(c => {
           const dotColor = c.id === 'normal' ? '#D7C4A8' : c.id === 'atencao' ? '#E8B07A' : c.id === 'critico' ? '#E88984' : c.id === 'zerado' ? 'rgba(255,255,255,0.45)' : INK_FG
           return (
-            <button key={c.id} onClick={() => setFilter(c.id)}
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: active ? FW_BOLD : FW_LIGHT, background: active ? INK : CARD, color: active ? INK_FG : SUBLABEL, transition: 'all .15s', border: `1px solid ${active ? 'transparent' : BORDER}`, backdropFilter: 'blur(20px)' }}
+            <button
+              key={c.id}
+              onClick={() => { setFilter(c.id); setFiltersOpen(false) }}
+              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: FW_LIGHT, background: CARD, color: SUBLABEL, transition: 'all .15s', border: `1px solid ${BORDER}`, backdropFilter: 'blur(20px)' }}
             >
-              {c.id !== 'todos' && <div style={{ width: 7, height: 7, borderRadius: '50%', background: active ? INK_FG : dotColor, opacity: active ? 0.85 : 1 }} />}
+              {c.id !== 'todos' && <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor }} />}
               {c.label}
             </button>
           )
@@ -1076,16 +1177,6 @@ function AjustesScreen({ products, isDark, setDark }: { products: Product[]; isD
           <Toggle />
         </div>
       </div>
-
-      <p style={{ margin: '0 4px 8px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 0.8 }}>Sobre</p>
-      <div style={{ ...GLASS, borderRadius: 24, overflow: 'hidden' }}>
-        {[{ l: 'Versão', v: '1.0.0' }, { l: 'Desenvolvido com', v: '❤️ Figma Make' }].map((x, i) => (
-          <div key={x.l} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderTop: i > 0 ? `1px solid ${BORDER}` : 'none' }}>
-            <span style={{ fontSize: 15, color: LABEL }}>{x.l}</span>
-            <span style={{ fontSize: 15, color: CAPTION }}>{x.v}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
@@ -1106,103 +1197,143 @@ const PAGE_KICKER: Record<Tab, string> = {
   estoque: 'inventário', movimentacoes: 'histórico', alertas: 'avisos', ajustes: 'preferências',
 }
 
-function generatePDF(products: Product[]) {
-  const now = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+function generatePDF(products: Product[], filter: FilterType = 'todos', movements: Movement[] = [], reportMonth = new Date().getMonth()) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const monthMeta = MONTHS[reportMonth]
+  const stamp = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   const total     = products.length
   const critical  = products.filter(p => stockStatus(p) === 'critical' || stockStatus(p) === 'empty').length
   const low       = products.filter(p => stockStatus(p) === 'low').length
-  const totalUnits = products.reduce((a, p) => a + p.stock, 0)
-
+  const toBuyList = products.filter(p => qtyToBuy(p) > 0).sort((a, b) => qtyToBuy(b) - qtyToBuy(a))
+  const monthMoves = movements.filter(m => {
+    const d = m.date instanceof Date ? m.date : new Date(m.date)
+    return d.getMonth() === reportMonth && d.getFullYear() === year
+  })
+  const usedInMonth = (productId: string) =>
+    monthMoves.filter(m => m.productId === productId && m.type !== 'entrada' && m.type !== 'ajuste')
+      .reduce((a, m) => a + m.quantity, 0)
+  const monthTotalUsed = monthMoves.filter(m => m.type !== 'entrada' && m.type !== 'ajuste').reduce((a, m) => a + m.quantity, 0)
+  const filterLabel: Record<FilterType, string> = {
+    todos: 'Todos', normal: 'Normal', atencao: 'Atenção', critico: 'Crítico', zerado: 'Zerado',
+  }
   const statusLabel: Record<ReturnType<typeof stockStatus>, string> = {
     ok: 'Normal', low: 'Atenção', critical: 'Crítico', empty: 'Zerado',
   }
-  const statusColor: Record<ReturnType<typeof stockStatus>, string> = {
-    ok: '#1a7f37', low: '#9a5700', critical: '#c0251b', empty: '#666',
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(16)
+  doc.text('Relatório de Estoque', 14, 16)
+  doc.setFontSize(11)
+  doc.text('Colégio Journey', 14, 22)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(90)
+  doc.text(`Competência: ${monthMeta.full} ${year}`, 14, 28)
+  doc.text(`Gerado em ${stamp}  ·  Filtro: ${filterLabel[filter]}`, 14, 33)
+  doc.setTextColor(20)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text(`${total} produtos`, pageW - 14, 16, { align: 'right' })
+
+  const cards = [
+    { label: 'Total', value: String(total) },
+    { label: 'Alertas', value: String(critical) },
+    { label: 'Em atenção', value: String(low) },
+    { label: `Uso em ${monthMeta.short}`, value: String(monthTotalUsed) },
+  ]
+  const gap = 4
+  const cardW = (pageW - 28 - gap) / 2
+  cards.forEach((c, i) => {
+    const col = i % 2
+    const row = Math.floor(i / 2)
+    const x = 14 + col * (cardW + gap)
+    const y = 38 + row * 18
+    doc.setDrawColor(220)
+    doc.roundedRect(x, y, cardW, 15, 2, 2)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(20)
+    doc.text(c.value, x + 4, y + 7)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(100)
+    doc.text(c.label, x + 4, y + 12)
+  })
+
+  autoTable(doc, {
+    startY: 78,
+    head: [['Produto', 'Estoque', 'Ideal', `Uso ${monthMeta.short}`, 'Status']],
+    body: products.map(p => {
+      const s = stockStatus(p)
+      return [
+        p.name,
+        `${p.stock} ${p.unit}`,
+        `${idealStockOf(p)} ${p.unit}`,
+        `${usedInMonth(p.id)} ${p.unit}`,
+        statusLabel[s],
+      ]
+    }),
+    styles: { fontSize: 8.5, cellPadding: 1.8 },
+    headStyles: { fillColor: [26, 22, 20], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 246, 244] },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 4) {
+        const v = String(data.cell.raw)
+        if (v === 'Crítico' || v === 'Zerado') data.cell.styles.textColor = [192, 37, 27]
+        else if (v === 'Atenção') data.cell.styles.textColor = [154, 87, 0]
+        else data.cell.styles.textColor = [26, 127, 55]
+      }
+    },
+    margin: { left: 14, right: 14 },
+  })
+
+  const afterTable = ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 78) + 12
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.setTextColor(139, 21, 16)
+  doc.text('Deve comprar', 14, afterTable)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(90)
+  doc.text('Quantidade para completar o estoque ideal (sempre cheio).', 14, afterTable + 5)
+  doc.setTextColor(20)
+
+  if (toBuyList.length === 0) {
+    doc.setFontSize(10)
+    doc.text('Nenhum item abaixo do estoque ideal.', 14, afterTable + 14)
+  } else {
+    autoTable(doc, {
+      startY: afterTable + 8,
+      head: [['Produto', 'Atual', 'Ideal', 'Deve comprar']],
+      body: toBuyList.map(p => [
+        p.name,
+        `${p.stock} ${p.unit}`,
+        `${idealStockOf(p)} ${p.unit}`,
+        `${qtyToBuy(p)} ${p.unit}`,
+      ]),
+      styles: { fontSize: 8.5, cellPadding: 1.8 },
+      headStyles: { fillColor: [139, 21, 16], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [252, 242, 240] },
+      columnStyles: { 3: { fontStyle: 'bold', textColor: [139, 21, 16] } },
+      margin: { left: 14, right: 14 },
+    })
   }
 
-  const rows = products.map(p => {
-    const s = stockStatus(p)
-    const pct = Math.round(stockPct(p))
-    return `
-      <tr>
-        <td>${p.name}</td>
-        <td>${p.category}</td>
-        <td style="text-align:center">${p.stock} ${p.unit}</td>
-        <td style="text-align:center">${p.used} ${p.unit}</td>
-        <td style="text-align:center">${p.minStock} ${p.unit}</td>
-        <td style="text-align:center">
-          <div style="background:#e5e7eb;border-radius:4px;height:8px;overflow:hidden;width:80px;margin:0 auto">
-            <div style="height:100%;width:${pct}%;background:${statusColor[s]};border-radius:4px"></div>
-          </div>
-        </td>
-        <td style="text-align:center">
-          <span style="font-size:11px;font-weight:700;color:${statusColor[s]};background:${statusColor[s]}18;padding:2px 8px;border-radius:20px">${statusLabel[s]}</span>
-        </td>
-      </tr>`
-  }).join('')
+  const pages = doc.getNumberOfPages()
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(140)
+    doc.text(`Controle de Estoque Journey — ${monthMeta.full} ${year}  ·  página ${i} de ${pages}`, 14, doc.internal.pageSize.getHeight() - 8)
+  }
 
-  const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Relatório de Estoque</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1c1c1e; background: #fff; padding: 32px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; border-bottom: 2px solid #1c1c1e; padding-bottom: 16px; }
-    .header h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
-    .header p  { font-size: 12px; color: #666; margin-top: 4px; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 28px; }
-    .stat { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; }
-    .stat-v { font-size: 22px; font-weight: 800; }
-    .stat-l { font-size: 11px; color: #666; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    thead th { background: #1c1c1e; color: #fff; padding: 10px 12px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-    thead th:nth-child(n+3) { text-align: center; }
-    tbody tr:nth-child(even) { background: #f9fafb; }
-    tbody td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
-    .footer { margin-top: 24px; font-size: 11px; color: #999; text-align: center; }
-    @media print { body { padding: 16px; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <h1>Relatório de Estoque</h1>
-      <p>Gerado em ${now}</p>
-    </div>
-    <div style="text-align:right;font-size:12px;color:#666">
-      <div style="font-size:18px;font-weight:800;color:#1c1c1e">${total}</div>
-      <div>produtos cadastrados</div>
-    </div>
-  </div>
-  <div class="stats">
-    <div class="stat"><div class="stat-v">${total}</div><div class="stat-l">Total de produtos</div></div>
-    <div class="stat"><div class="stat-v" style="color:#c0251b">${critical}</div><div class="stat-l">Estoque crítico</div></div>
-    <div class="stat"><div class="stat-v" style="color:#9a5700">${low}</div><div class="stat-l">Em atenção</div></div>
-    <div class="stat"><div class="stat-v">${totalUnits}</div><div class="stat-l">Unidades em estoque</div></div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Produto</th>
-        <th>Categoria</th>
-        <th>Estoque atual</th>
-        <th>Utilizados</th>
-        <th>Mínimo</th>
-        <th>Nível</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="footer">Controle de Estoque — ${now}</div>
-  <script>window.onload = () => { window.print(); }<\/script>
-</body>
-</html>`
-
-  const win = window.open('', '_blank', 'width=900,height=700')
-  if (win) { win.document.write(html); win.document.close() }
+  const mm = String(reportMonth + 1).padStart(2, '0')
+  doc.save(`relatorio-estoque-journey-${year}-${mm}.pdf`)
 }
 
 const persisted = loadState<Product, Movement>()
@@ -1275,30 +1406,19 @@ export default function App() {
 
         {/* Header */}
         <header style={{ padding: '22px 22px 12px', background: HEADER_BG, backdropFilter: 'blur(22px)', borderBottom: 'none', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-            <div>
-              <img
-                src={`${import.meta.env.BASE_URL}logo-journey.png`}
-                alt="Colégio Journey"
-                style={{ height: 56, width: 'auto', maxWidth: 'min(280px, 70vw)', display: 'block', objectFit: 'contain' }}
-              />
-              {tab === 'estoque' ? (
-                <p style={{ margin: '10px 0 0', fontSize: 13, color: CAPTION, fontWeight: FW_LIGHT }}>
-                  {products.length} produtos cadastrados
-                </p>
-              ) : (
-                <p className="kicker" style={{ marginTop: 10 }}>{PAGE_KICKER[tab]} · {PAGE_TITLE[tab]}</p>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {alertCount > 0 && tab !== 'alertas' && (
-                <button onClick={() => setTab('alertas')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999, background: 'rgba(232,137,132,0.18)', color: CORAL, fontWeight: FW_BOLD, fontSize: 13, border: '1px solid rgba(232,137,132,0.28)', cursor: 'pointer' }}
-                >
-                  ⚠️ {alertCount} alerta{alertCount > 1 ? 's' : ''}
-                </button>
-              )}
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <img
+              src={`${import.meta.env.BASE_URL}logo-journey.png`}
+              alt="Colégio Journey"
+              style={{ height: 56, width: 'auto', maxWidth: 'min(280px, 70vw)', display: 'block', objectFit: 'contain' }}
+            />
+            {tab === 'estoque' ? (
+              <p style={{ margin: '10px 0 0', fontSize: 13, color: CAPTION, fontWeight: FW_LIGHT }}>
+                {products.length} produtos cadastrados
+              </p>
+            ) : (
+              <p className="kicker" style={{ marginTop: 10 }}>{PAGE_KICKER[tab]} · {PAGE_TITLE[tab]}</p>
+            )}
           </div>
         </header>
 

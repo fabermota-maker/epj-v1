@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
       figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{ts,tsx,js,jsx}' }),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png', 'atmosphere.webp', 'logo-journey.png'],
+        includeAssets: ['apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png', 'atmosphere.webp', 'logo-journey.png', 'hero-journey.png'],
         manifest: {
           name: 'Estoque Journey',
           short_name: 'Estoque',
@@ -78,7 +78,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
-      watch: { ignored: ['**/.figma/**', '**/public/**'] },
+      watch: { ignored: ['**/.figma/**', '**/public/**', '**/src/assets/**'] },
     },
     preview: {
       host: '0.0.0.0',
