@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
       figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{ts,tsx,js,jsx}' }),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png', 'atmosphere.webp', 'logo-journey.png', 'hero-journey.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png', 'atmosphere.webp', 'logo-journey.png', 'hero-journey.png'],
         manifest: {
           name: 'Estoque Journey',
           short_name: 'Estoque',
