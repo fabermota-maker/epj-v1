@@ -41,9 +41,10 @@ export default defineConfig(({ mode }) => {
           description: 'Controle de estoque de produtos Journey no celular.',
           lang: 'pt-BR',
           display: 'standalone',
+          display_override: ['standalone', 'fullscreen', 'minimal-ui'],
           orientation: 'portrait',
-          background_color: '#2A1C22',
-          theme_color: '#2A1C22',
+          background_color: '#0A1730',
+          theme_color: '#0A1730',
           start_url: './',
           scope: './',
           icons: [

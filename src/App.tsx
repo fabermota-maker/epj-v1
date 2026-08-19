@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { loadState, saveState } from './storage'
@@ -161,7 +162,6 @@ const BORDER    = 'var(--tok-border)'
 const SHADOW    = 'var(--tok-shadow)'
 const SIDEBAR   = 'var(--tok-sidebar)'
 const HEADER_BG = 'var(--tok-header-bg)'
-const NAV_BG    = 'var(--tok-nav-bg)'
 const INK       = 'var(--tok-ink)'
 const INK_FG    = 'var(--tok-ink-fg)'
 const FW_LIGHT  = 300
@@ -1405,14 +1405,17 @@ function AlertasScreen({ products }: { products: Product[] }) {
 
 // ─── Ajustes Screen ───────────────────────────────────────────────────────────
 
-function AjustesScreen({ products, isDark, setDark, onRestoreMonthList, onFillIdeal }: {
+function AjustesScreen({ products, isDark, setDark, onRestoreMonthList, onFillIdeal, onExport, onImportText }: {
   products: Product[]
   isDark: boolean
   setDark: (v: boolean) => void
   onRestoreMonthList: () => void
   onFillIdeal: () => void
+  onExport: () => void
+  onImportText: (text: string, fileName: string) => string
 }) {
   const [note, setNote] = useState('')
+  const importRef = useRef<HTMLInputElement>(null)
   const rows = [
     { label: 'Total de produtos',   value: `${products.length}` },
     { label: 'Itens com alerta',    value: `${products.filter(p => stockStatus(p) !== 'ok').length}` },
@@ -1428,18 +1431,25 @@ function AjustesScreen({ products, isDark, setDark, onRestoreMonthList, onFillId
     </button>
   )
 
-  const Action = ({ title, hint, onClick }: { title: string; hint: string; onClick: () => void }) => (
+  const Action = ({ title, onClick }: { title: string; onClick: () => void }) => (
     <button
       onClick={onClick}
       style={{
-        display: 'block', width: '100%', textAlign: 'left', padding: '14px 16px',
-        background: 'transparent', border: 'none', cursor: 'pointer',
+        flex: 1, minWidth: 0, padding: '12px 10px', background: 'transparent', border: 'none',
+        cursor: 'pointer', fontSize: 13, fontWeight: FW_BOLD, color: LABEL, lineHeight: 1.25, textAlign: 'center',
       }}
     >
-      <p style={{ margin: 0, fontSize: 15, color: LABEL, fontWeight: FW_BOLD }}>{title}</p>
-      <p style={{ margin: '3px 0 0', fontSize: 12, color: CAPTION, fontWeight: FW_LIGHT, lineHeight: 1.35 }}>{hint}</p>
+      {title}
     </button>
   )
+
+  const ActionRow = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ ...GLASS, borderRadius: 24, overflow: 'hidden', display: 'flex', alignItems: 'stretch', marginBottom: 22 }}>
+      {children}
+    </div>
+  )
+
+  const VLine = () => <div style={{ width: 1, background: BORDER, flexShrink: 0, margin: '10px 0' }} />
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 118px' }}>
@@ -1465,30 +1475,115 @@ function AjustesScreen({ products, isDark, setDark, onRestoreMonthList, onFillId
       </div>
 
       <p style={{ margin: '0 4px 8px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 0.8 }}>Início do mês</p>
-      <div style={{ ...GLASS, borderRadius: 24, overflow: 'hidden', marginBottom: 12 }}>
+      <ActionRow>
         <Action
           title="Voltar à lista do mês"
-          hint="Restaura o cadastro original dos produtos (nomes, mínimos, ideais e quantidades da lista configurada)."
           onClick={() => {
             if (!confirm('Restaurar a lista original do mês? Alterações no cadastro serão substituídas pela configuração salva no app.')) return
             onRestoreMonthList()
             setNote('Lista do mês restaurada.')
           }}
         />
-        <div style={{ height: 1, background: BORDER, margin: '0 16px' }} />
+        <VLine />
         <Action
           title="Estoque cheio"
-          hint="Coloca cada produto no estoque ideal e zera o uso — para começar o mês com o almoxarifado completo."
           onClick={() => {
             if (!confirm('Preencher o estoque com o ideal e zerar o uso de todos os produtos?')) return
             onFillIdeal()
             setNote('Estoque preenchido no ideal. Uso zerado.')
           }}
         />
-      </div>
+      </ActionRow>
+
+      <p style={{ margin: '0 4px 8px', fontSize: 11, fontWeight: FW_LIGHT, color: CAPTION, textTransform: 'uppercase', letterSpacing: 0.8 }}>Exportar / importar</p>
+      <ActionRow>
+        <Action
+          title="Exportar PDF"
+          onClick={() => {
+            onExport()
+            setNote('PDF e cópia .json baixados. Guarde o .json para sincronizar.')
+          }}
+        />
+        <VLine />
+        <Action
+          title="Importar"
+          onClick={() => importRef.current?.click()}
+        />
+      </ActionRow>
+      <input
+        ref={importRef}
+        type="file"
+        accept=".json,application/json,.txt,.pdf,application/pdf"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (!file) return
+          file.text().then(text => setNote(onImportText(text, file.name))).catch(() => setNote('Não foi possível ler o arquivo.'))
+        }}
+      />
       {note && <p style={{ margin: '0 4px', fontSize: 13, color: '#4ECDC4' }}>{note}</p>}
     </div>
   )
+}
+
+const BACKUP_KIND = 'journey-estoque-backup-v1'
+
+function downloadJsonBackup(products: Product[], movements: Movement[], categories: string[], dark: boolean) {
+  const payload = {
+    kind: BACKUP_KIND,
+    version: 1,
+    savedAt: new Date().toISOString(),
+    products,
+    movements,
+    categories,
+    dark,
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `epj-copia-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function parseBackupFile(text: string, fileName: string): { products: Product[]; movements: Movement[]; categories?: string[]; dark?: boolean } | { error: string } {
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.pdf') || text.startsWith('%PDF')) {
+    return { error: 'O PDF é só para impressão. Para sincronizar, escolha o arquivo .json baixado junto na exportação.' }
+  }
+  try {
+    const parsed = JSON.parse(text) as {
+      kind?: string
+      products?: Product[]
+      movements?: Array<Movement & { date: string | Date }>
+      categories?: string[]
+      dark?: boolean
+    }
+    if (!Array.isArray(parsed.products) || parsed.products.length === 0) {
+      return { error: 'Arquivo sem produtos. Use o .json gerado em Exportar PDF.' }
+    }
+    const products = parsed.products.filter(p => p && typeof p.id === 'string' && typeof p.name === 'string').map(p => ({
+      ...p,
+      stock: Number(p.stock) || 0,
+      minStock: Number(p.minStock) || 0,
+      used: Number(p.used) || 0,
+    }))
+    if (!products.length) return { error: 'Nenhum produto válido neste arquivo.' }
+    const movements = (Array.isArray(parsed.movements) ? parsed.movements : []).map(m => ({
+      ...m,
+      date: new Date(m.date),
+    }))
+    return {
+      products,
+      movements,
+      categories: parsed.categories,
+      dark: parsed.dark,
+    }
+  } catch {
+    return { error: 'Arquivo inválido. Importe o .json da exportação, não o PDF.' }
+  }
 }
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
@@ -1677,6 +1772,46 @@ export default function App() {
     saveState({ products, movements, dark, categories })
   }, [products, movements, dark, categories])
 
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: fullscreen)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true
+    if (isStandalone) return
+
+    type InstallEvt = Event & { prompt: () => Promise<void> }
+    let installEvt: InstallEvt | null = null
+
+    const enterFullscreen = () => {
+      const el = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void> | void
+      }
+      if (document.fullscreenElement) return
+      if (el.requestFullscreen) {
+        el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
+        return
+      }
+      try { el.webkitRequestFullscreen?.() } catch { /* iOS Safari may block */ }
+    }
+
+    const onFirstGesture = () => {
+      enterFullscreen()
+      installEvt?.prompt().catch(() => {})
+    }
+
+    const onInstall = (e: Event) => {
+      e.preventDefault()
+      installEvt = e as InstallEvt
+    }
+
+    window.addEventListener('beforeinstallprompt', onInstall)
+    window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true })
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onInstall)
+      window.removeEventListener('pointerdown', onFirstGesture)
+    }
+  }, [])
+
   const alertCount = products.filter(p => { const s = stockStatus(p); return s === 'critical' || s === 'empty' }).length
 
   const handleUpdate = (p: Product[], m: Movement[]) => { setProducts(p); setMovements(m) }
@@ -1782,42 +1917,62 @@ export default function App() {
             setCategories(uniqueCategories([...DEFAULT_CATEGORIES, ...restored.map(p => p.category)]))
           }} onFillIdeal={() => {
             setProducts(ps => ps.map(p => ({ ...p, stock: idealStockOf(p), used: 0 })))
+          }} onExport={() => {
+            generatePDF(products, 'todos', movements, new Date().getMonth())
+            downloadJsonBackup(products, movements, categories, dark)
+          }} onImportText={(text, fileName) => {
+            const parsed = parseBackupFile(text, fileName)
+            if ('error' in parsed) return parsed.error
+            if (!confirm(`Substituir os ${products.length} produtos deste aparelho pelos ${parsed.products.length} do arquivo?`)) {
+              return 'Importação cancelada.'
+            }
+            setProducts(parsed.products)
+            setMovements(parsed.movements)
+            setCategories(uniqueCategories([
+              ...DEFAULT_CATEGORIES,
+              ...(parsed.categories ?? []),
+              ...parsed.products.map(p => p.category),
+            ]))
+            if (typeof parsed.dark === 'boolean') setDark(parsed.dark)
+            return `Sincronizado: ${parsed.products.length} produtos.`
           }} />}
         </main>
 
-        {/* Bottom nav — mobile only via CSS */}
-        <nav className="bottom-nav" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: NAV_BG, zIndex: 40, alignItems: 'center' }}>
-          {NAV.slice(0, 2).map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 0', color: tab === n.id ? LABEL : CAPTION, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'color .12s' }}
+        {createPortal(
+          <nav className="bottom-nav">
+            {NAV.slice(0, 2).map(n => (
+              <button key={n.id} onClick={() => setTab(n.id)}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 0', color: tab === n.id ? LABEL : CAPTION, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'color .12s' }}
+              >
+                <div style={{ position: 'relative' }}>{n.icon}</div>
+                <span style={{ fontSize: 10, fontWeight: tab === n.id ? FW_BOLD : FW_LIGHT }}>{n.label}</span>
+              </button>
+            ))}
+            <button
+              onClick={openNewProduct}
+              aria-label="Novo produto"
+              style={{ width: 48, height: 48, borderRadius: 999, background: INK, color: INK_FG, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', margin: '0 6px' }}
             >
-              <div style={{ position: 'relative' }}>{n.icon}</div>
-              <span style={{ fontSize: 10, fontWeight: tab === n.id ? FW_BOLD : FW_LIGHT }}>{n.label}</span>
+              {Ic.plus}
             </button>
-          ))}
-          <button
-            onClick={openNewProduct}
-            aria-label="Novo produto"
-            style={{ width: 48, height: 48, borderRadius: 999, background: INK, color: INK_FG, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', margin: '0 6px' }}
-          >
-            {Ic.plus}
-          </button>
-          {NAV.slice(2).map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 0', color: tab === n.id ? LABEL : CAPTION, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'color .12s' }}
-            >
-              <div style={{ position: 'relative' }}>
-                {n.icon}
-                {n.id === 'alertas' && alertCount > 0 && (
-                  <span style={{ position: 'absolute', top: -4, right: -6, background: '#FF3B30', color: '#fff', fontSize: 9, fontWeight: FW_BOLD, width: 15, height: 15, borderRadius: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>
-                    {alertCount}
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: 10, fontWeight: tab === n.id ? FW_BOLD : FW_LIGHT }}>{n.label}</span>
-            </button>
-          ))}
-        </nav>
+            {NAV.slice(2).map(n => (
+              <button key={n.id} onClick={() => setTab(n.id)}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 0', color: tab === n.id ? LABEL : CAPTION, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'color .12s' }}
+              >
+                <div style={{ position: 'relative' }}>
+                  {n.icon}
+                  {n.id === 'alertas' && alertCount > 0 && (
+                    <span style={{ position: 'absolute', top: -4, right: -6, background: '#FF3B30', color: '#fff', fontSize: 9, fontWeight: FW_BOLD, width: 15, height: 15, borderRadius: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>
+                      {alertCount}
+                    </span>
+                  )}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: tab === n.id ? FW_BOLD : FW_LIGHT }}>{n.label}</span>
+              </button>
+            ))}
+          </nav>,
+          document.body,
+        )}
       </div>
 
       <style>{`
