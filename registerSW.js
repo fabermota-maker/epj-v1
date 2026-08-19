@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/epj-v1/sw.js', { scope: '/epj-v1/' })})}
