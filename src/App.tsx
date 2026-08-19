@@ -406,7 +406,7 @@ const Ic = {
 function Sheet({ onClose, children, fit }: { onClose: () => void; children: React.ReactNode; fit?: boolean }) {
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(18,10,12,0.28)', backdropFilter: 'blur(14px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(18,10,12,0.28)', backdropFilter: 'blur(14px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
       onClick={onClose}
     >
       <div
@@ -949,14 +949,16 @@ function ProductForm({ initial, onSave, onCancel, categories, onCreateCategory, 
 
 // ─── Estoque Screen ───────────────────────────────────────────────────────────
 
-function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0, categories, onCreateCategory, onRenameCategory, onRemoveCategory }: {
-  products: Product[]; movements: Movement[]
+function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0, categories, onCreateCategory, onRenameCategory, onRemoveCategory, onOverlayChange }: {
+  products: Product[]
+  movements: Movement[]
   onUpdate: (p: Product[], m: Movement[]) => void
   openNewKey?: number
   categories: string[]
   onCreateCategory: (name: string) => string | null
   onRenameCategory: (from: string, to: string) => string | null
   onRemoveCategory: (name: string) => string | null
+  onOverlayChange?: (open: boolean) => void
 }) {
   const [search, setSearch]     = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -972,6 +974,11 @@ function EstoqueScreen({ products, movements, onUpdate, openNewKey = 0, categori
   const monthWrapRef = useRef<HTMLDivElement>(null)
   const [selected, setSelected] = useState<Product | null>(null)
   const [editing, setEditing]   = useState<Product | 'new' | undefined>()
+
+  useEffect(() => {
+    onOverlayChange?.(!!selected || editing !== undefined)
+    return () => onOverlayChange?.(false)
+  }, [selected, editing, onOverlayChange])
 
   useEffect(() => {
     if (openNewKey) setEditing('new')
@@ -1754,6 +1761,7 @@ export default function App() {
   )
   const [dark, setDark]         = useState(persisted?.dark ?? true)
   const [openNewKey, setOpenNewKey] = useState(0)
+  const [hideNav, setHideNav] = useState(false)
 
   const openNewProduct = () => {
     setTab('estoque')
@@ -1907,6 +1915,7 @@ export default function App() {
               onCreateCategory={onCreateCategory}
               onRenameCategory={onRenameCategory}
               onRemoveCategory={onRemoveCategory}
+              onOverlayChange={setHideNav}
             />
           </div>
           {tab === 'movimentacoes' && <MovimentacoesScreen products={products} movements={movements} />}
@@ -1939,7 +1948,7 @@ export default function App() {
         </main>
 
         {createPortal(
-          <nav className="bottom-nav">
+          <nav className={`bottom-nav${hideNav ? ' is-hidden' : ''}`}>
             {NAV.slice(0, 2).map(n => (
               <button key={n.id} onClick={() => setTab(n.id)}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '8px 0', color: tab === n.id ? LABEL : CAPTION, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'color .12s' }}
@@ -1987,6 +1996,7 @@ export default function App() {
         @media (max-width: 899px) {
           .sidebar-desktop { display: none !important; }
           .bottom-nav      { display: flex !important; }
+          .bottom-nav.is-hidden { display: none !important; }
         }
       `}</style>
     </div>
